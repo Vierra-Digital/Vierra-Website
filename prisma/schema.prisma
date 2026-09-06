@@ -732,6 +732,7 @@ model Client {
   onboarding_sessions              OnboardingSession[]
   stored_files                     StoredFile[]
   client_outreach_tracker          ClientOutreachTracker[]
+  artemis_prospect_jobs            ArtemisProspectJob[]
 
   @@map("clients")
   @@index([assigned_to], map: "idx_clients_assigned_to")
@@ -774,6 +775,7 @@ model Company {
   artemis_knowledge_docs                     ArtemisKnowledgeDoc[]
   artemis_review_items                       ArtemisReviewItem[]
   artemis_runs                               ArtemisRun[]
+  artemis_prospect_jobs                      ArtemisProspectJob[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -2200,6 +2202,7 @@ model User {
   artemis_knowledge_docs ArtemisKnowledgeDoc[]
   artemis_review_items ArtemisReviewItem[]
   artemis_runs ArtemisRun[]
+  artemis_prospect_jobs ArtemisProspectJob[]
 
   @@map("users")
   @@schema("public")
@@ -2278,10 +2281,15 @@ model CartographyRun {
   status          String               @default("running")
   /** Set by screenCartographyQuery() when it rejects/flags this run's query; null if clean. */
   screening_note  String?
+  /** Set when this run was persisted from a /prospect job (see lib/cartography/prospectMethod.ts)
+   * rather than the synchronous sub-agent fallback. Unique so a job polled to completion more
+   * than once is persisted at most once. */
+  prospect_job_id String?              @unique
   created_at      DateTime             @default(now()) @db.Timestamptz(6)
   completed_at    DateTime?            @db.Timestamptz(6)
   cartography_run_tasks CartographyRunTask[]
   cartography_contacts CartographyContact[]
+  artemis_prospect_job  ArtemisProspectJob? @relation(fields: [prospect_job_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
   @@map("cartography_runs")
   @@index([company_id], map: "idx_cartography_runs_company_id")
@@ -2440,5 +2448,32 @@ model ArtemisRun {
   @@map("artemis_runs")
   @@index([company_id, created_at(sort: Desc)], map: "idx_artemis_runs_company_created")
   @@index([endpoint, created_at(sort: Desc)], map: "idx_artemis_runs_endpoint_created")
+  @@schema("public")
+}
+
+/// A partner-discovery /prospect job run against artemis.vierradev.com. Applied by
+/// prisma/manual/20260910_artemis_prospect_jobs.sql. `id` is the job_id Artemis minted, not a
+/// local uuid, so start.ts/callback.ts/[jobId].ts can address it without a lookup. Exists purely
+/// so the panel can authorize "does this session's client own this job_id" without asking
+/// Artemis — the box has no notion of Vierra's client/company model.
+model ArtemisProspectJob {
+  id           String   @id
+  client_id    String   @db.Uuid
+  company_id   String   @db.Uuid
+  requested_by String?  @db.Uuid
+  goal         String
+  /** "queued" | "running" | "done" | "failed" | "interrupted" */
+  status       String   @default("queued")
+  result       Json?
+  error        String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  clients      Client   @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companies    Company  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        User?    @relation(fields: [requested_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  cartography_run CartographyRun?
+
+  @@map("artemis_prospect_jobs")
+  @@index([client_id, created_at(sort: Desc)], map: "idx_artemis_prospect_jobs_client_created")
   @@schema("public")
 }

@@ -1,21 +1,23 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
 import { screenCartographyQuery } from "@/lib/cartography/screenQuery";
-import { runCartographyAgent } from "@/lib/cartography/agentOrchestrator";
-import { persistCartographyRun, persistScreeningRejection } from "@/lib/cartography/persistRun";
+import { persistScreeningRejection } from "@/lib/cartography/persistRun";
+import { startProspectDiscovery } from "@/lib/cartography/prospectMethod";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export type { CartographyAgentCandidate, SubAgentTaskResult, DiscoveryMethod } from "@/lib/cartography/agentOrchestrator";
 
 /**
- * Cartography's Agentic-mode backend (see docs/CARTOGRAPHY_DESIGN.md rollout phase 2 and its
- * "Sub-agent orchestration" section). Every submitted description passes
- * screenCartographyQuery() before anything runs — same gate Search mode's endpoint uses once
- * it exists — then fans out to lib/cartography/agentOrchestrator.ts's per-method sub-agents.
+ * Cartography's Agentic-mode backend. Every submitted description passes
+ * screenCartographyQuery() before anything runs — same gate Search mode's endpoint uses —
+ * then starts a real /prospect job via lib/cartography/prospectMethod.ts (backed by
+ * lib/prospect/startJob.ts). This replaced the old synchronous LLM-brainstorm sub-agent
+ * orchestrator (lib/cartography/agentOrchestrator.ts, kept only for its exported types, which
+ * other Cartography code still references).
  *
- * Persists the run via lib/cartography/persistRun.ts (see Rollout M2) — but persistence
- * failing (e.g. Supabase unreachable) never costs the caller the candidates the agent already
- * found; `runId` is simply omitted from the response when that happens.
+ * /prospect is async, so this only submits and hands back a job_id — the caller polls
+ * pages/api/prospect/[jobId].ts for progress and, once terminal, posts to
+ * pages/api/cartography/agent/persist.ts to turn the finished job into a cartography_runs row.
  */
 export default withAuth(
   async (req, res, session) => {
@@ -27,22 +29,20 @@ export default withAuth(
     }
     const createdBy = session.user.id;
 
-    try {
-      const screening = screenCartographyQuery(description);
-      if (!screening.ok) {
-        await persistScreeningRejection({ companyId, createdBy, icpDescription: description, reason: screening.reason });
-        res.status(400).json({ message: screening.reason });
-        return;
-      }
-
-      const { tasks, candidates } = await runCartographyAgent(description);
-      const persisted = await persistCartographyRun({ companyId, createdBy, icpDescription: description, result: { tasks, candidates } });
-
-      res.status(200).json({ tasks, candidates, runId: persisted?.runId ?? null });
-    } catch (e) {
-      console.error("[cartography] agent run failed:", e);
-      res.status(502).json({ message: "Couldn't complete the Cartography agent run." });
+    const screening = screenCartographyQuery(description);
+    if (!screening.ok) {
+      await persistScreeningRejection({ companyId, createdBy, icpDescription: description, reason: screening.reason });
+      res.status(400).json({ message: screening.reason });
+      return;
     }
+
+    const outcome = await startProspectDiscovery(companyId, description, createdBy);
+    if (!outcome.ok) {
+      res.status(outcome.status).json({ message: outcome.message });
+      return;
+    }
+
+    res.status(202).json({ jobId: outcome.jobId });
   },
   { methods: ["POST"] }
 );
