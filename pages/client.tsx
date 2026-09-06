@@ -28,6 +28,10 @@ const LinkedInContextSection = dynamic(
   () => import("@/components/PanelPages/LinkedInContextSection"),
   { ssr: false }
 )
+const ClientOverviewSection = dynamic(
+  () => import("@/components/PanelPages/ClientOverviewSection"),
+  { ssr: false }
+)
 const ClientTeamSection = dynamic(() => import("@/components/PanelPages/ClientTeamSection"), {
   ssr: false,
 })
@@ -236,17 +240,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
               />
             ) : (
               <>
-                {currentSection === 0 && (
-                  <div className="flex-1 flex justify-center px-6 pt-2">
-                    <div className="w-full max-w-6xl flex flex-col h-full">
-                      <div className="w-full flex justify-between items-center mb-2">
-                        <div>
-                          <h1 className={`text-2xl font-semibold text-[#111827] mt-6 mb-6 ${inter.className}`}>Dashboard</h1>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                {currentSection === 0 && <ClientOverviewSection title="Dashboard" />}
                 {currentSection === 1 && <FilesSection readOnly showOwnerInReadOnly />}
                 {currentSection === 2 && <LinkedInContextSection title="Context" />}
                 {currentSection === 3 && <ClientTeamSection />}

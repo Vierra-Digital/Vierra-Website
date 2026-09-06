@@ -110,7 +110,7 @@ interface ClientsSectionProps {
     isAdmin?: boolean
     onAddClient?: () => void
     refreshTrigger?: number
-    onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email">) => void
+    onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email" | "companyId">) => void
     onSetActiveClient?: (client: Pick<ClientRow, "companyId" | "businessName"> | null) => void
     /** The company id currently being worked on, so the row can offer to stop. */
     activeCompanyId?: string | null
@@ -498,7 +498,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 <div className="min-w-0">
                                     <button
                                         type="button"
-                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
                                         className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
                                     >
                                         {r.name || "—"}
@@ -551,7 +551,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 isAdmin={isAdmin}
                                 busy={updatingClient === r.id || deleting}
                                 triggerId={`open-client-${r.id}`}
-                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
                                 isWorkingOn={activeCompanyId === r.companyId}
                                 onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
                                 onClearActive={() => onSetActiveClient?.(null)}

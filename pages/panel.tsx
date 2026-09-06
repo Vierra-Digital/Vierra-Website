@@ -76,6 +76,10 @@ const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
   { ssr: false }
 )
+const ClientOverviewSection = dynamic(
+  () => import("@/components/PanelPages/ClientOverviewSection"),
+  { ssr: false }
+)
 const FilesSection = dynamic(
   () => import("@/components/PanelPages/FilesSection"),
   { ssr: false }
@@ -143,7 +147,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
   const [isClientViewMode, setIsClientViewMode] = useState(false)
   const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
-  const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string; companyId: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
   const { activeClient, setActiveClient } = useActiveClient()
 
@@ -320,7 +324,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     })()
   }
 
-  const enterClientViewMode = async (client: { id: string; name: string; email: string }) => {
+  const enterClientViewMode = async (client: { id: string; name: string; email: string; companyId: string }) => {
     if (!(await confirmDiscardDrafts())) return
     // Where to put the reader back when they return: the row they opened, and the scroll offset
     // the list was at. Without both, leaving a workspace dropped them at the top of an unfamiliar
@@ -582,7 +586,12 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               </span>
               {isClientViewMode ? (
                     <>
-                      {viewModeSection === 0 && <DashboardSection />}
+                      {viewModeSection === 0 && (
+                        <ClientOverviewSection
+                          companyId={viewClient?.companyId ?? null}
+                          title={viewClient?.name || "Client"}
+                        />
+                      )}
                       {viewModeSection === 1 && (
                         <FilesSection readOnly allowDelete showOwnerInReadOnly fileFilter={viewClient?.id} />
                       )}
