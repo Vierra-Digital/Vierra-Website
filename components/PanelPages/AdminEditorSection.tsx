@@ -120,18 +120,24 @@ const formatIp = (ip?: string | null) => {
     return trimmed
 }
 
-/** "3m ago" up to a week, then a date — a raw timestamp is rarely what you want to read here. */
-const formatRelative = (iso?: string | null) => {
+/**
+ * "3m Ago" up to a week, then a date.
+ *
+ * `now` is passed in rather than read from the clock inside, so the ticking state below is what
+ * re-renders these labels. Reading Date.now() here would make the function correct and the screen
+ * still wrong — React has no reason to re-render just because time passed.
+ */
+const formatRelative = (iso: string | null | undefined, now: number) => {
     if (!iso) return null
     const then = new Date(iso).getTime()
     if (!Number.isFinite(then)) return null
-    const minutes = Math.floor((Date.now() - then) / 60000)
-    if (minutes < 1) return "Just now"
-    if (minutes < 60) return `${minutes}m ago`
+    const minutes = Math.floor((now - then) / 60000)
+    if (minutes < 1) return "Just Now"
+    if (minutes < 60) return `${minutes}m Ago`
     const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
+    if (hours < 24) return `${hours}h Ago`
     const days = Math.floor(hours / 24)
-    if (days < 7) return `${days}d ago`
+    if (days < 7) return `${days}d Ago`
     return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
 }
 
@@ -164,6 +170,10 @@ function UsersPanel() {
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
     const [rescindingInvite, setRescindingInvite] = useState<string | null>(null)
+    // Drives the relative-time labels. Seeded at 0 so the server and the first client render agree
+    // — reading the clock during render is what produces a hydration mismatch — and set for real
+    // in the effect below.
+    const [now, setNow] = useState(0)
     const [deleteError, setDeleteError] = useState<string>("")
     const [deletingUser, setDeletingUser] = useState<boolean>(false)
     const [searchQuery, setSearchQuery] = useState<string>("")
@@ -190,7 +200,9 @@ function UsersPanel() {
     const [renewModalOpen, setRenewModalOpen] = useState<boolean>(false)
     const [renewSuccess, setRenewSuccess] = useState<boolean>(false)
 
-    const pageSize = 10
+    // Twenty-five rows a page: this list holds staff, clients and pending invites together, so ten
+    // meant paging through a company that fits on one screen.
+    const pageSize = 25
     const filterRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -237,6 +249,30 @@ function UsersPanel() {
         // Loading both lists on mount; the loader flips its own loading and error state after awaiting.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         load()
+    }, [load])
+
+    /**
+     * Keeps Last Login live, the same way the dashboard's staff panel keeps presence live: tick the
+     * clock so "5m Ago" becomes "6m Ago" without a reload, and re-read the list on the same beat so
+     * a sign-in that happened while this page was open turns up.
+     *
+     * Only while the tab is visible — a backgrounded admin page polling every minute is waste, and
+     * it refreshes on return rather than waiting out the rest of the interval.
+     */
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setNow(Date.now())
+        const tick = () => {
+            if (document.visibilityState !== "visible") return
+            setNow(Date.now())
+            void load()
+        }
+        const timer = window.setInterval(tick, 60_000)
+        document.addEventListener("visibilitychange", tick)
+        return () => {
+            window.clearInterval(timer)
+            document.removeEventListener("visibilitychange", tick)
+        }
     }, [load])
 
     const sendPasswordReset = async (userId: string) => {
@@ -691,14 +727,14 @@ function UsersPanel() {
                         header: "Last Login",
                         cell: (u) =>
                             u.pendingInvite ? (
-                                <span className="text-[12px] text-[#9CA3AF]">Invited {formatRelative(u.pendingInvite.invitedAt)}</span>
+                                <span className="text-[12px] text-[#9CA3AF]">Invited {formatRelative(u.pendingInvite.invitedAt, now)}</span>
                             ) : u.lastLoginAt ? (
                                 /* Time first, address underneath and muted: the address is why the column
                                    is worth a join, but it is reference detail, and `whitespace-nowrap`
                                    keeps an IPv6 address on one line instead of wrapping mid-address. */
                                 <div className="flex flex-col items-start gap-0.5">
                                     <span className="whitespace-nowrap" title={new Date(u.lastLoginAt).toLocaleString()}>
-                                        {formatRelative(u.lastLoginAt)}
+                                        {formatRelative(u.lastLoginAt, now)}
                                     </span>
                                     <span
                                         className="whitespace-nowrap text-[11.5px] text-[#9CA3AF]"
