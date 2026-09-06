@@ -668,7 +668,7 @@ function UsersPanel() {
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 emptyTitle="No Users Found"
-                emptyMessage={searchQuery ? "No users match your search." : "No users to show yet."}
+                emptyMessage="No users match your search."
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
                 columns={[
                     {
