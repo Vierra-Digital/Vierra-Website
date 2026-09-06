@@ -29,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         image_storage_key: true,
         created_at: true,
         is_active: true,
+        user_id: true,
         client_billing: { select: { monthly_retainer_cents: true } },
         onboarding_sessions: {
           orderBy: { created_at: "desc" },
@@ -52,7 +53,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const adGoal = answers.socialMediaGoals ?? "N/A";
       const brandTone = answers.brandTone ?? "N/A";
       const industry = answers.industry ?? "";
-      let displayStatus: string = latest?.status ?? "pending";
+      // A representative who joined an already-onboarded company via team invite (see
+      // lib/auth/resolveUser.ts's invite-acceptance branch) never gets an onboarding_sessions row
+      // at all — that flow only exists for the primary client onboarding wizard (NDA, Stripe,
+      // etc). Defaulting a missing session to "pending" left every such teammate stuck showing
+      // as perpetually pending even after they'd finished their own account setup and reached
+      // their dashboard. Their user_id is set the moment the invite is accepted (unlike a
+      // primary-onboarding client, whose user_id stays null until the wizard actually
+      // completes), so its presence is what distinguishes "nothing to complete" from "hasn't
+      // started yet."
+      let displayStatus: string = latest?.status ?? (c.user_id ? "completed" : "pending");
       const isExpired = latest?.expires_at && now > latest.expires_at;
       if (isExpired && displayStatus !== "completed") {
         displayStatus = "expired";

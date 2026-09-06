@@ -7,7 +7,7 @@ import { inter } from "@/lib/fonts";
 import { Eye, EyeOff } from "lucide-react";
 import { FiCheck } from "react-icons/fi";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import type { Session } from "@supabase/supabase-js";
 
 export default function SetPasswordPage() {
     const router = useRouter();
@@ -19,6 +19,7 @@ export default function SetPasswordPage() {
     const [success, setSuccess] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [linkError, setLinkError] = useState("");
+    const [tokens, setTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
 
     useEffect(() => {
         // Recovery links land here with tokens in the URL hash (never sent to the
@@ -35,15 +36,28 @@ export default function SetPasswordPage() {
             return;
         }
 
-        const supabase = getSupabaseBrowserClient();
-        supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-            setHasSession(!!result.data.session);
-        });
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (!accessToken || !refreshToken) {
+            setHasSession(false);
+            return;
+        }
 
-        const { data: subscription } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
-            if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setHasSession(true);
-        });
-        return () => subscription.subscription.unsubscribe();
+        const supabase = getSupabaseBrowserClient();
+        // Explicitly adopt this link's session rather than trusting whatever session is already
+        // ambient in the browser (e.g. a staff member's own /panel login in the same browser) — that
+        // ambiguity previously let a client's recovery link silently update the wrong account.
+        supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(
+            ({ data, error: setSessionError }: { data: { session: Session | null }; error: { message: string } | null }) => {
+                if (setSessionError || !data.session) {
+                    setLinkError("This link is invalid or has expired.");
+                    setHasSession(false);
+                    return;
+                }
+                setTokens({ accessToken, refreshToken });
+                setHasSession(true);
+            }
+        );
     }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -60,12 +74,17 @@ export default function SetPasswordPage() {
             return;
         }
 
+        if (!tokens) {
+            setError("This link is invalid or has expired. Please request a new one.");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const response = await fetch("/api/auth/setPassword", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ password }),
+                body: JSON.stringify({ password, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }),
             });
             const data = await response.json().catch(() => ({}));
 

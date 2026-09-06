@@ -2,7 +2,9 @@ import { withSession } from "@/lib/api/withSession"
 import { prisma } from "@/lib/prisma"
 
 export default withSession(async (req, res, session) => {
-  const role = (session.user as { role?: string })?.role
+  // Client sessions never carry a `role` (see ResolvedIdentity's "client" variant) — default to
+  // "user" the same way pages/api/context/client.ts does, or every real client gets 403'd here.
+  const role = ((session.user as { role?: string })?.role || "user") as string
   if (role !== "admin" && role !== "staff" && role !== "user")
     return res.status(403).json({ message: "Forbidden" })
 
