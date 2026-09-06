@@ -238,15 +238,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // `contacts-xlsx:${companyId}` (see lib/contacts/xlsx.ts) — a representative's own companyId
   // is already known; a staff member must name the target client explicitly.
   const companyId = session.kind === "client" ? session.companyId : resolveTargetCompanyId(session, req)
-  if (!companyId) {
+  // A representative is pinned to their own company, so having none is a real error for them.
+  if (session.kind === "client" && !companyId) {
     return res.status(400).json({ message: "companyId is required" })
   }
-  if (usingTokenId && session.kind === "member" && tokenId.startsWith(`contacts-xlsx:${companyId}`)) {
+  if (usingTokenId && session.kind === "member" && companyId && tokenId.startsWith(`contacts-xlsx:${companyId}`)) {
     await syncContactsSpreadsheetForUser({ userId: uid, companyId })
   }
 
-  const where: { signing_token_id?: string; id?: string; company_id: string; user_id?: string; client_id?: string } = {
-    company_id: companyId,
+  /**
+   * A staff member without a selected client is not refused here.
+   *
+   * This is reached by opening a URL, not by panelFetch — the preview tab and the download both
+   * navigate straight to it — so nothing attaches a companyId, and requiring one meant every PDF
+   * saved from the signer answered "companyId is required" until a client happened to be active.
+   *
+   * Dropping the filter for a member does not widen anything: role model v2 lets any Vierra staff
+   * member target any client company, so a member could pass whichever companyId they liked. The
+   * parameter selects, it does not authorise. The row is still found by an unguessable signing
+   * token or a file id, and a representative stays pinned to their own company and client below.
+   */
+  const where: { signing_token_id?: string; id?: string; company_id?: string; user_id?: string; client_id?: string } = {
+    ...(companyId ? { company_id: companyId } : {}),
     ...(usingTokenId ? { signing_token_id: tokenId } : { id: fileId as string }),
   }
 

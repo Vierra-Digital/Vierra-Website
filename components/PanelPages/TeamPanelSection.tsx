@@ -1,13 +1,25 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
+import { FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronDown, FiX } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { inter } from "@/lib/fonts";
-import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
+import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
+import {
+    PanelBadge,
+    PanelButton,
+    PanelClearFilters,
+    PanelDataTable,
+    PanelEmptyCell,
+    PanelHeader,
+    PanelPage,
+    PanelPopover,
+    PanelSearch,
+    PanelSelect,
+} from "@/components/panel/PanelTable";
 
 /** Strict email-shape check shared by the team invite/edit modals below. */
 const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value);
@@ -21,13 +33,16 @@ const StaffActionsMenu: React.FC<{
 }> = ({ staffName, onEdit, onDelete, isSelf }) => {
     return (
         <RowActionMenu label={`Manage ${staffName}`}>
-            <RowActionMenuItem onClick={onEdit} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
+            <RowActionMenuItem onClick={onEdit} icon={<FiEdit3 className="w-4 h-4" />}>
                 Edit Staff
             </RowActionMenuItem>
             {!isSelf && (
-                <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-                    Remove Staff
-                </RowActionMenuItem>
+                <>
+                    <RowActionMenuDivider />
+                    <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                        Remove Staff
+                    </RowActionMenuItem>
+                </>
             )}
         </RowActionMenu>
     )
@@ -39,7 +54,7 @@ const InviteActionsMenu: React.FC<{
 }> = ({ inviteEmail, onRescind }) => {
     return (
         <RowActionMenu label={`Manage invite for ${inviteEmail}`}>
-            <RowActionMenuItem onClick={onRescind} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+            <RowActionMenuItem onClick={onRescind} icon={<FiTrash2 className="w-4 h-4" />}>
                 Rescind Invite
             </RowActionMenuItem>
         </RowActionMenu>
@@ -56,8 +71,13 @@ interface TeamRow {
     country: string
     company_email: string | null
     mentor: string | null
-    time_zone: string
-    strikes: string
+    time_zone: string | null
+    /**
+     * The count, not the "2/3" label. It was typed as a string while the API sends the integer
+     * column straight through, so sorting by Strikes called .split on a number and took the whole
+     * panel down with it. null means "not applicable" — a pending invite has no strike count.
+     */
+    strikes: number | null
     status: string
     lastActiveAt: string | null
     isPending?: boolean
@@ -103,15 +123,19 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [selectedStaff, setSelectedStaff] = useState<TeamRow | null>(null)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [staffToDelete, setStaffToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [deleteError, setDeleteError] = useState("")
+    const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
-    const [sortBy, setSortBy] = useState<"position" | "country" | "strikes" | "status">("position")
+    const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
     const [statusFilter, setStatusFilter] = useState<"all" | "online" | "away" | "offline" | "pending">("all")
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const filterRef = useRef<HTMLDivElement>(null)
-    const pageSize = 10
+    // Twenty-five a page, the same as User Management — ten meant paging through a team that
+    // fits on one screen.
+    const pageSize = 25
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -133,12 +157,15 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     const handleDeleteStaff = (staffId: string, staffName: string) => {
         setStaffToDelete({ id: staffId, name: staffName })
+        setDeleteError("")
         setShowDeleteModal(true)
     }
 
     const confirmDeleteStaff = async () => {
         if (!staffToDelete) return
 
+        setDeleting(true)
+        setDeleteError("")
         try {
             const response = await fetch(`/api/admin/users`, {
                 method: "DELETE",
@@ -147,14 +174,22 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             })
 
             if (!response.ok) {
-                throw new Error("Failed to delete staff member")
+                // The endpoint says exactly why it refused — "Superadmin accounts can't be
+                // removed here.", "You cannot remove your own account", "User not found" — and
+                // that was being thrown away and replaced with a browser alert reading "Failed
+                // to delete staff member. Please try again.", so a deliberate refusal was
+                // indistinguishable from a crash and retrying could never help.
+                const body = await response.json().catch(() => ({}))
+                setDeleteError(body?.message || `Could not remove this member (HTTP ${response.status}).`)
+                return
             }
             setRows(prev => prev.filter(r => r.id !== staffToDelete.id))
             setShowDeleteModal(false)
             setStaffToDelete(null)
-        } catch (error) {
-            console.error("Error deleting staff:", error)
-            alert("Failed to delete staff member. Please try again.")
+        } catch {
+            setDeleteError("Could not remove this member — the request failed.")
+        } finally {
+            setDeleting(false)
         }
     }
 
@@ -233,7 +268,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 country: u.country,
                 company_email: u.company_email,
                 mentor: u.mentor,
-                strikes: u.strikes,
+                strikes: typeof u.strikes === "number" ? u.strikes : 0,
                 time_zone: u.time_zone,
                 status: u.status,
                 lastActiveAt: u.lastActiveAt,
@@ -249,15 +284,19 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         const invitations = await invRes.json()
                         pendingRows = (invitations as any[]).map((inv: any) => ({
                             id: inv.id,
-                            name: inv.email,
+                            // The invite carries what the inviter filled in, so a pending row reads
+                            // like the rest of the table rather than repeating the email twice and
+                            // showing a dash where real answers exist. The Pending badge is what
+                            // marks it, not a placeholder in every column.
+                            name: [inv.first_name, inv.last_name].filter(Boolean).join(" ") || inv.email,
                             email: inv.email,
                             image: null,
-                            position: "Invited",
+                            position: inv.position || "Invited",
                             country: "—",
                             company_email: null,
                             mentor: null,
-                            time_zone: "—",
-                            strikes: "—",
+                            time_zone: inv.time_zone || null,
+                            strikes: null,
                             status: "pending",
                             lastActiveAt: null,
                             isPending: true,
@@ -318,13 +357,14 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     aValue = positionOrder[a.position as keyof typeof positionOrder] || 999
                     bValue = positionOrder[b.position as keyof typeof positionOrder] || 999
                     break
-                case "country":
-                    aValue = a.country || ""
-                    bValue = b.country || ""
+                case "timeZone":
+                    aValue = a.time_zone || ""
+                    bValue = b.time_zone || ""
                     break
                 case "strikes":
-                    aValue = parseInt(a.strikes?.split("/")[0] || "0")
-                    bValue = parseInt(b.strikes?.split("/")[0] || "0")
+                    // Rows with no strike count sort last in either direction.
+                    aValue = a.strikes ?? -1
+                    bValue = b.strikes ?? -1
                     break
                 case "status":
                     const statusOrder = { "pending": 0, "online": 1, "away": 2, "offline": 3 }
@@ -352,37 +392,20 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         loadTeamData()
     }, [loadTeamData])
 
-    const columns = useMemo(() => {
-        const baseColumns = [
-            { key: "name", header: "Name" },
-            { key: "position", header: "Position" },
-            { key: "country", header: "Country" },
-            { key: "company_email", header: "Company Email" },
-            { key: "mentor", header: "Mentor" },
-            { key: "strikes", header: "Strikes" },
-            { key: "status", header: "Status" },
-        ]
-        if (userRole === "admin") {
-            baseColumns.push({ key: "manage", header: "Manage" })
-        }
-        
-        return baseColumns
-    }, [userRole])
-
-    const getPositionColor = (position: string) => {
+    const positionTone = (position: string) => {
         switch (position) {
             case "Founder":
             case "Leadership":
             case "Business Advisor":
-                return "bg-red-100 text-red-800"
+                return "danger" as const
             case "Developer":
-                return "bg-blue-100 text-blue-800"
+                return "info" as const
             case "Designer":
-                return "bg-purple-100 text-purple-800"
+                return "accent" as const
             case "Outreach":
-                return "bg-green-100 text-green-800"
+                return "positive" as const
             default:
-                return "bg-gray-100 text-gray-800"
+                return "neutral" as const
         }
     }
 
@@ -390,280 +413,175 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     // Clamped rather than reset: a filter that shrinks the list can leave currentPage past the end,
     // and slicing beyond the array renders an empty table with no way to tell why.
     const page = Math.min(currentPage, totalPages - 1)
-    const paginatedRows = filteredRows.slice(page * pageSize, (page + 1) * pageSize)
 
     return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-x-hidden">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-            <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-5">Staff Orbital</h1>
-            {/* Search / filter / invite belong under the title, not competing with it on the
-                same line — at 30px the heading and a row of controls fight for the same band. */}
-            <div className="w-full flex flex-wrap items-center gap-3 mb-5">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="staff-search" className="sr-only">Search Staff</label>
-                                <input 
-                                    id="staff-search" 
-                                    type="search" 
-                                    placeholder="Search Staff" 
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none" 
+        <PanelPage>
+            <PanelHeader title="Staff Orbital">
+                <PanelSearch
+                    id="staff-search"
+                    label="Search Staff"
+                    placeholder="Search staff"
+                    value={searchTerm}
+                    onChange={setSearchTerm}
+                />
+                <div className="relative" ref={filterRef}>
+                    <PanelButton
+                        onClick={() => setIsFilterOpen(!isFilterOpen)}
+                        icon={<FiFilter className="h-4 w-4" />}
+                    >
+                        Filter
+                        <FiChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                    </PanelButton>
+                    {isFilterOpen && (
+                        <PanelPopover>
+                            <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
+                            <PanelSelect
+                                label="Sort By"
+                                value={sortBy}
+                                onChange={(value) => setSortBy(value as typeof sortBy)}
+                                options={[
+                                    { value: "position", label: "Position" },
+                                    { value: "timeZone", label: "Time Zone" },
+                                    { value: "strikes", label: "Strikes" },
+                                    { value: "status", label: "Status" },
+                                ]}
+                            />
+                            <PanelSelect
+                                label="Status"
+                                value={statusFilter}
+                                onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+                                options={[
+                                    { value: "all", label: "All Status" },
+                                    { value: "online", label: "Online" },
+                                    { value: "away", label: "Away" },
+                                    { value: "offline", label: "Offline" },
+                                    { value: "pending", label: "Pending" },
+                                ]}
+                            />
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Order</span>
+                                <div className="flex gap-2">
+                                    {(["asc", "desc"] as const).map((dir) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => setSortOrder(dir)}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                sortOrder === dir
+                                                    ? "bg-[#701CC0] text-white"
+                                                    : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {dir === "asc" ? "Ascending" : "Descending"}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <PanelClearFilters
+                                onClick={() => {
+                                    setSearchTerm("")
+                                    setSortBy("position")
+                                    setSortOrder("asc")
+                                    setStatusFilter("all")
+                                    setIsFilterOpen(false)
+                                }}
+                            />
+                        </PanelPopover>
+                    )}
+                </div>
+                {userRole === "admin" && (
+                    <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
+                        Invite Staff
+                    </PanelButton>
+                )}
+            </PanelHeader>
+
+            <PanelDataTable<TeamRow>
+                rows={filteredRows}
+                getRowKey={(r) => r.id}
+                loading={loading}
+                loadingLabel={<LoadingSpinner label="Loading Staff Data..." />}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                emptyTitle="No Staff Found"
+                emptyMessage="No staff match your search."
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
+                columns={[
+                    {
+                        key: "name",
+                        header: "Name",
+                        cell: (r) => (
+                            <div className="flex items-center gap-3">
+                                <ProfileImage
+                                    src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
+                                    name={r.name}
+                                    size={32}
+                                    alt={`${r.name}'s profile`}
                                 />
-                    </div>
-                            <div className="relative" ref={filterRef}>
-                                <button 
-                                    onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                                >
-                        <FiFilter className="w-4 h-4" />
-                                    <span className="text-sm font-medium">Filter</span>
-                                    <svg 
-                                        className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
-                                        fill="none" 
-                                        stroke="currentColor" 
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                {isFilterOpen && (
-                                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                        <div className="px-5">
-                                            <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                            
-                                            
-                                            <div className="mb-5">
-                                                <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                                <div className="relative">
-                                                    <select
-                                                        value={sortBy}
-                                                        onChange={(e) => setSortBy(e.target.value as "position" | "country" | "strikes" | "status")}
-                                                        className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                                    >
-                                                        <option value="position">Position</option>
-                                                        <option value="country">Country/Timezone</option>
-                                                        <option value="strikes">Strikes</option>
-                                                        <option value="status">Status</option>
-                                                    </select>
-                                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                        <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                        </svg>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            
-                                            <div className="mb-5">
-                                                <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => setSortOrder("asc")}
-                                                        className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                            sortOrder === "asc" 
-                                                                ? "bg-[#701CC0] text-white shadow-sm" 
-                                                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                        }`}
-                                                    >
-                                                        Ascending
-                    </button>
-                                                    <button
-                                                        onClick={() => setSortOrder("desc")}
-                                                        className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                            sortOrder === "desc" 
-                                                                ? "bg-[#701CC0] text-white shadow-sm" 
-                                                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                        }`}
-                                                    >
-                                                        Descending
-                    </button>
-                </div>
-            </div>
-
-                                            
-                                            <div className="mb-4">
-                                                <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
-                                                <div className="relative">
-                                                    <select
-                                                        value={statusFilter}
-                                                        onChange={(e) => setStatusFilter(e.target.value as "all" | "online" | "away" | "offline" | "pending")}
-                                                        className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                                    >
-                                                        <option value="all">All Status</option>
-                                                        <option value="online">Online</option>
-                                                        <option value="away">Away</option>
-                                                        <option value="offline">Offline</option>
-                                                        <option value="pending">Pending</option>
-                                                    </select>
-                                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                        <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                        </svg>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            
-                                            <div className="pt-3 border-t border-[#E5E7EB]">
-                                                <button
-                                                    onClick={() => {
-                                                        setSearchTerm("")
-                                                        setSortBy("position")
-                                                        setSortOrder("asc")
-                                                        setStatusFilter("all")
-                                                        setIsFilterOpen(false)
-                                                    }}
-                                                    className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                                >
-                                                    Clear All Filters
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        {userRole === "admin" && (
-                            <button
-                                onClick={() => setShowAddStaff(true)}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
-                            >
-                                <FiPlus className="w-4 h-4" />
-                                Invite Teammate
-                            </button>
-                        )}
-                        </div>
-                    </div>
-
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <LoadingSpinner label="Loading Staff Data..." />
-                        </div>
-                    ) : (
-                        <>
-                            {!loading && filteredRows.length === 0 && (
-                                <div className="text-center py-12">
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                        <Image src="/assets/no-client.png" alt="No staff" width={224} height={224} className="w-56 h-auto mb-3" />
-                                        <p className="text-sm text-gray-500 mb-3">You have no staff added.</p>
-                                        {userRole === "admin" && (
-                                            <button
-                                                onClick={() => setShowAddStaff(true)}
-                                                className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
-                                            >
-                                                <FiPlus className="w-4 h-4 mr-2" />
-                                                Invite Teammate
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {!loading && filteredRows.length > 0 && (
-                                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB]">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                        <tr>
-                                            {columns.map((column) => (
-                                                <th key={column.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                                    {column.header}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                        {paginatedRows.map((r) => (
-                                            <tr key={r.id} className="hover:bg-purple-50">
-                                                <td className="px-4 py-4">
-                                                    <div className="flex items-center">
-                                                        <ProfileImage
-                                                            src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
-                                                            name={r.name}
-                                                            size={32}
-                                                            alt={`${r.name}'s profile`}
-                                                        />
-                                                        <div className="ml-3">
-                                                            <div className="text-sm font-medium text-[#111827]">{r.name}</div>
-                                                            <div className="text-sm text-[#6B7280]">{r.email}</div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-4 text-sm">
-                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPositionColor(r.position)}`}>
-                                                        {r.position}
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-4 text-sm text-[#111827]">
-                                                    <div>{r.country}</div>
-                                                    <div className="text-xs text-[#6B7280]">{r.time_zone}</div>
-                                                </td>
-                                                <td className="px-4 py-4 text-sm text-[#111827]">{r.company_email || "—"}</td>
-                                                <td className="px-4 py-4 text-sm text-[#111827]">{r.mentor || "—"}</td>
-                                                <td className="px-4 py-4 text-sm">{r.strikes || "0/3"}</td>
-                                                <td className="px-4 py-4 text-sm">
-                                                    <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />
-                                    </td>
-                                                {userRole === "admin" && (
-                                                    <td className="px-4 py-4 text-sm text-[#6B7280] relative">
-                                                        {r.isPending ? (
-                                                            <InviteActionsMenu
-                                                                inviteEmail={r.email}
-                                                                onRescind={() => handleRescindInvite(r.id, r.email)}
-                                                            />
-                                                        ) : (
-                                                            <StaffActionsMenu
-                                                                staffId={r.id}
-                                                                staffName={r.name}
-                                                                onEdit={() => handleManageStaff(r)}
-                                                                onDelete={() => handleDeleteStaff(r.id, r.name)}
-                                                                isSelf={r.isSelf}
-                                                            />
-                                                        )}
-                                    </td>
-                                                )}
-                                </tr>
-                            ))}
-                        </tbody>
-                            </table>
-                        </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {!loading && filteredRows.length > 0 && (
-                        <div className="mt-4 pt-4 text-xs text-[#677489]">
-                            <div className="w-full flex items-center justify-center">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(Math.max(0, page - 1))}
-                                        disabled={page === 0}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Previous
-                                    </button>
-                                    <span className="text-xs text-[#6B7280]">
-                                        Page {page + 1} of {totalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, page + 1))}
-                                        disabled={page >= totalPages - 1}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Next
-                                    </button>
+                                <div className="min-w-0">
+                                    {/* A pending invite has no name, so both lines were the same
+                                        address printed twice. Same rule User Management uses: the
+                                        address is the line when there is nothing else to put there. */}
+                                    <div className="truncate font-medium text-[#111827]">{r.name || r.email}</div>
+                                    {r.name && r.email && r.name !== r.email ? (
+                                        <div className="truncate text-[12px] text-[#6B7280]">{r.email}</div>
+                                    ) : null}
                                 </div>
                             </div>
-                        </div>
-                    )}
-                </div>
-            </div>
+                        ),
+                    },
+                    {
+                        key: "position",
+                        header: "Position",
+                        cell: (r) => (r.position ? <PanelBadge tone={positionTone(r.position)}>{r.position}</PanelBadge> : <PanelEmptyCell />),
+                    },
+                    {
+                        key: "time_zone",
+                        header: "Time Zone",
+                        cell: (r) => (r.time_zone ? timeZoneLabel(r.time_zone) : <PanelEmptyCell />),
+                    },
+                    { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
+                    {
+                        key: "strikes",
+                        header: "Strikes",
+                        className: "tabular-nums",
+                        cell: (r) => (r.strikes === null ? <PanelEmptyCell /> : `${r.strikes}/3`),
+                    },
+                    {
+                        key: "status",
+                        header: "Status",
+                        cell: (r) => <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />,
+                    },
+                    ...(userRole === "admin"
+                        ? [
+                              {
+                                  key: "manage",
+                                  header: "Manage",
+                                  className: "relative",
+                                  cell: (r: TeamRow) =>
+                                      r.isPending ? (
+                                          <InviteActionsMenu inviteEmail={r.email} onRescind={() => handleRescindInvite(r.id, r.email)} />
+                                      ) : (
+                                          <StaffActionsMenu
+                                              staffId={r.id}
+                                              staffName={r.name}
+                                              onEdit={() => handleManageStaff(r)}
+                                              onDelete={() => handleDeleteStaff(r.id, r.name)}
+                                              isSelf={r.isSelf}
+                                          />
+                                      ),
+                              },
+                          ]
+                        : []),
+                ]}
+            />
 
             {showAddStaff && userRole === "admin" && (
                 <InviteTeammateModal
+                    mentorOptions={rows
+                        .filter((r) => !r.isPending)
+                        .map((r) => ({ id: r.id, name: r.name, email: r.email }))}
                     onClose={() => setShowAddStaff(false)}
                     onCreated={() => {
                         setShowAddStaff(false)
@@ -675,6 +593,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             {showManageModal && selectedStaff && userRole === "admin" && (
                 <ManageStaffModal
                     staff={selectedStaff}
+                    mentorOptions={rows
+                        .filter((r) => !r.isPending)
+                        .map((r) => ({ id: r.id, name: r.name, email: r.email }))}
                     onClose={() => {
                         setShowManageModal(false)
                         setSelectedStaff(null)
@@ -692,12 +613,21 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             Are you sure you want to remove{" "}
                             <span className="font-semibold text-[#111827]">{staffToDelete?.name || ""}</span>? This action
                             is permanent and cannot be undone. All associated data will be removed.
+                            {deleteError && (
+                                <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                    {deleteError}
+                                </span>
+                            )}
                         </>
                     }
                     confirmLabel="Remove Staff"
+                    // As above: the label changed but the button stayed clickable.
+                    busy={deleting}
+                    busyLabel="Removing…"
                     onCancel={() => {
                         setShowDeleteModal(false)
                         setStaffToDelete(null)
+                        setDeleteError("")
                     }}
                     onConfirm={confirmDeleteStaff}
                 />
@@ -715,6 +645,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         </>
                     }
                     confirmLabel="Rescind Invite"
+                    danger={false}
                     onCancel={() => {
                         setShowRescindModal(false)
                         setInviteToRescind(null)
@@ -722,17 +653,162 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     onConfirm={confirmRescindInvite}
                 />
             )}
-        </div>
+        </PanelPage>
     )
 }
-const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
+const FIELD_BASE =
+    "h-9 w-full rounded-[10px] px-3 text-[13px] text-[#111827] ring-1 ring-inset transition-shadow focus:outline-none"
+const FIELD = `${FIELD_BASE} bg-[#F4F2F8] ring-transparent focus:bg-white focus:ring-[#701CC0]/35`
+/** Same field, flagged. Built from the same base rather than rewritten, which is how the colour
+ *  went missing the first time. */
+const FIELD_INVALID = `${FIELD_BASE} bg-red-50 ring-red-300 focus:ring-red-400`
+
+/** Select in the panel's field styling, with our chevron rather than the platform's. */
+const FieldSelect: React.FC<{
+    value: string
+    onChange: (value: string) => void
+    children: React.ReactNode
+}> = ({ value, onChange, children }) => (
+    <span className="relative block">
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${FIELD} appearance-none pr-9`}>
+            {children}
+        </select>
+        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden />
+    </span>
+)
+
+const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
+
+/**
+ * The zones a team is plausibly spread across, labelled by city rather than by IANA identifier.
+ * The value stored is still the identifier — "America/New_York" is what Date formatting needs —
+ * but nobody should have to type it, or remember whether it is New_York or New York.
+ */
+/**
+ * The abbreviation here is a fallback, not the first choice. Where the platform knows a letter
+ * code it is derived instead, because the code is not a fixed property of the zone — New York is
+ * EST for half the year and EDT for the other half. ICU only carries letter codes for US zones
+ * though; everywhere else it answers with a GMT offset, and "Tokyo (JST)" beats "Tokyo (GMT+9)".
+ */
+const TIME_ZONE_OPTIONS: Array<{ value: string; city: string; abbr: string }> = [
+    { value: "Pacific/Honolulu", city: "Honolulu", abbr: "HST" },
+    { value: "America/Anchorage", city: "Anchorage", abbr: "AKT" },
+    { value: "America/Los_Angeles", city: "Los Angeles", abbr: "PT" },
+    { value: "America/Denver", city: "Denver", abbr: "MT" },
+    { value: "America/Phoenix", city: "Phoenix", abbr: "MST" },
+    { value: "America/Chicago", city: "Chicago", abbr: "CT" },
+    { value: "America/New_York", city: "New York", abbr: "ET" },
+    { value: "America/Toronto", city: "Toronto", abbr: "ET" },
+    { value: "America/Mexico_City", city: "Mexico City", abbr: "CST" },
+    { value: "America/Bogota", city: "Bogotá", abbr: "COT" },
+    { value: "America/Sao_Paulo", city: "São Paulo", abbr: "BRT" },
+    { value: "America/Argentina/Buenos_Aires", city: "Buenos Aires", abbr: "ART" },
+    { value: "Europe/London", city: "London", abbr: "GMT/BST" },
+    { value: "Europe/Dublin", city: "Dublin", abbr: "GMT/IST" },
+    { value: "Europe/Lisbon", city: "Lisbon", abbr: "WET" },
+    { value: "Europe/Madrid", city: "Madrid", abbr: "CET" },
+    { value: "Europe/Paris", city: "Paris", abbr: "CET" },
+    { value: "Europe/Berlin", city: "Berlin", abbr: "CET" },
+    { value: "Europe/Warsaw", city: "Warsaw", abbr: "CET" },
+    { value: "Europe/Athens", city: "Athens", abbr: "EET" },
+    { value: "Europe/Istanbul", city: "Istanbul", abbr: "TRT" },
+    { value: "Europe/Moscow", city: "Moscow", abbr: "MSK" },
+    { value: "Africa/Lagos", city: "Lagos", abbr: "WAT" },
+    { value: "Africa/Johannesburg", city: "Johannesburg", abbr: "SAST" },
+    { value: "Africa/Nairobi", city: "Nairobi", abbr: "EAT" },
+    { value: "Asia/Dubai", city: "Dubai", abbr: "GST" },
+    { value: "Asia/Karachi", city: "Karachi", abbr: "PKT" },
+    { value: "Asia/Kolkata", city: "Kolkata", abbr: "IST" },
+    { value: "Asia/Dhaka", city: "Dhaka", abbr: "BST" },
+    { value: "Asia/Bangkok", city: "Bangkok", abbr: "ICT" },
+    { value: "Asia/Singapore", city: "Singapore", abbr: "SGT" },
+    { value: "Asia/Manila", city: "Manila", abbr: "PHT" },
+    { value: "Asia/Hong_Kong", city: "Hong Kong", abbr: "HKT" },
+    { value: "Asia/Shanghai", city: "Shanghai", abbr: "CST" },
+    { value: "Asia/Tokyo", city: "Tokyo", abbr: "JST" },
+    { value: "Asia/Seoul", city: "Seoul", abbr: "KST" },
+    { value: "Australia/Perth", city: "Perth", abbr: "AWST" },
+    { value: "Australia/Sydney", city: "Sydney", abbr: "AET" },
+    { value: "Pacific/Auckland", city: "Auckland", abbr: "NZT" },
+]
+
+/**
+ * The zone's abbreviation as of now — "EST" in January, "EDT" in July. Zones with no letter
+ * abbreviation come back as a GMT offset ("GMT+5:30"), which is what the platform has to offer
+ * and still reads correctly in the label.
+ */
+const timeZoneAbbreviation = (timeZone: string, now = new Date()) => {
+    try {
+        return (
+            new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })
+                .formatToParts(now)
+                .find((part) => part.type === "timeZoneName")?.value ?? ""
+        )
+    } catch {
+        // An unknown or malformed zone throws rather than returning anything useful.
+        return ""
+    }
+}
+
+/**
+ * users.name is a single column, and the dialogs ask for the halves separately. Splitting at the
+ * first space and rejoining with one round-trips exactly — "Mary Jane Watson" comes back as
+ * itself — so nothing is lost by editing through two fields.
+ */
+const splitName = (full: string) => {
+    const trimmed = full.trim().replace(/\s+/g, " ")
+    const space = trimmed.indexOf(" ")
+    return space === -1
+        ? { first: trimmed, last: "" }
+        : { first: trimmed.slice(0, space), last: trimmed.slice(space + 1) }
+}
+
+/** "America/New_York" reads as "New York (EST)". Falls back to the last path segment. */
+const timeZoneLabel = (timeZone: string, now = new Date()) => {
+    const option = TIME_ZONE_OPTIONS.find((entry) => entry.value === timeZone)
+    const city = option?.city ?? timeZone.split("/").pop()?.replace(/_/g, " ") ?? timeZone
+    const derived = timeZoneAbbreviation(timeZone, now)
+    // A derived code is preferred only when it is a code. Outside the US the platform answers with
+    // an offset like "GMT+5:30", and the curated letters read better than that. Bare "GMT" is
+    // excluded with the offsets: London derives it in winter but an offset in summer, so taking it
+    // would relabel those zones twice a year.
+    const isCode = /^[A-Z]{2,}$/.test(derived) && derived !== "GMT"
+    const abbreviation = isCode ? derived : option?.abbr ?? derived
+    return abbreviation ? `${city} (${abbreviation})` : city
+}
+
+
+/**
+ * Invite dialog, with the staff detail it used to collect before invitations replaced direct
+ * account creation: position, mentor, time zone and strikes. None of it can be written to a user
+ * that does not exist yet, so it rides on the invitation row and is applied to the membership
+ * when the invite is accepted (see lib/auth/resolveUser.ts).
+ */
+const InviteTeammateModal: React.FC<{
+    onClose: () => void
+    onCreated: () => void
+    mentorOptions: Array<{ id: string; name: string; email: string }>
+}> = ({ onClose, onCreated, mentorOptions }) => {
     const [email, setEmail] = useState("")
+    const [position, setPosition] = useState("")
+    const [mentorId, setMentorId] = useState("")
+    const [firstName, setFirstName] = useState("")
+    const [lastName, setLastName] = useState("")
+    const [timeZone, setTimeZone] = useState("")
+    const [strikes, setStrikes] = useState(0)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
 
-    // role model v2: every invite here is a Vierra staff hire — there is no admin-via-invite path
-    // ("admin" is set only via direct database access, see docs/ROLE_MODEL_REDESIGN.md).
+    // Everything but the mentor has to be answered. Strikes always holds a value, so it is the
+    // name, email, position and time zone that decide whether the invite can go.
+    const canSubmit =
+        firstName.trim() !== "" &&
+        lastName.trim() !== "" &&
+        isValidEmail(email) &&
+        position !== "" &&
+        timeZone !== ""
+
     const submit = async () => {
         setSubmitting(true)
         setError("")
@@ -740,7 +816,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
             const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ firstName, lastName, email, position, mentorId, timeZone, strikes }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
@@ -799,20 +875,53 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
         <Modal
             zIndexClass="z-50"
             backdropClassName="bg-black/50 backdrop-blur-sm"
-            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-            label="Invite Teammate"
+            cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+            label="Invite Staff"
             onClose={onClose}
         >
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-                        <FiPlus className="w-6 h-6 text-[#701CC0]" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Invite Teammate</h3>
-            </div>
+                <header className="mb-5 flex items-center justify-between gap-4">
+                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-[#111827]">Invite Staff</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="rounded-lg p-2 text-[#6B7280] transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                        <FiX className="h-5 w-5" />
+                    </button>
+                </header>
 
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-2">Email</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            First Name <span className="text-[#B42318]">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            className={FIELD}
+                            placeholder="Bidoof"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Last Name <span className="text-[#B42318]">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            className={FIELD}
+                            placeholder="Sanchez"
+                            required
+                        />
+                    </div>
+                    <div className="sm:col-span-2">
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Email <span className="text-[#B42318]">*</span>
+                        </label>
                         <input
                             type="email"
                             value={email}
@@ -820,70 +929,118 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
                                 setEmail(e.target.value)
                                 if (error) setError("")
                             }}
-                            className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                                email && !isValidEmail(email) ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
-                            }`}
-                            placeholder="teammate@company.com"
+                            className={email && !isValidEmail(email) ? FIELD_INVALID : FIELD}
+                            placeholder="name@vierradev.com"
                             required
                         />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Position <span className="text-[#B42318]">*</span>
+                        </label>
+                        <FieldSelect value={position} onChange={setPosition}>
+                            <option value="">Not set</option>
+                            {POSITION_OPTIONS.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                            ))}
+                        </FieldSelect>
+                    </div>
+                    <div>
+                        {/* A picker, not the free-text box the edit dialog still uses: the column is a
+                            uuid foreign key to a user, so a typed name could never have been stored. */}
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
+                        </label>
+                        <FieldSelect value={mentorId} onChange={setMentorId}>
+                            <option value="">None</option>
+                            {mentorOptions.map((option) => (
+                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
+                            ))}
+                        </FieldSelect>
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Strikes <span className="text-[#B42318]">*</span>
+                        </label>
+                        <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
+                            {[0, 1, 2, 3].map((n) => (
+                                <option key={n} value={n}>{n}/3</option>
+                            ))}
+                        </FieldSelect>
+                    </div>
+                    <div className="sm:col-span-2">
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Time Zone <span className="text-[#B42318]">*</span>
+                        </label>
+                        <FieldSelect value={timeZone} onChange={setTimeZone}>
+                            <option value="">Select A Time Zone</option>
+                            {TIME_ZONE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {timeZoneLabel(option.value)}
+                                </option>
+                            ))}
+                        </FieldSelect>
                     </div>
                 </div>
 
                 {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
-                <div className="flex justify-between items-center mt-6">
+                <div className="mt-6 flex justify-end gap-2">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                        className="h-9 rounded-[10px] bg-[#F4F2F8] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3]"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={submit}
-                        disabled={submitting || !isValidEmail(email)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                            submitting || !isValidEmail(email)
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                        }`}
+                        disabled={submitting || !canSubmit}
+                        className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {submitting ? "Sending..." : "Send Invite"}
+                        {submitting ? "Sending…" : "Send Invite"}
                     </button>
                 </div>
         </Modal>
     )
 }
+/**
+ * Edit a staff member.
+ *
+ * Rebuilt on the same fields as the invite dialog. Two things went with the rebuild: Country and
+ * Company Email, which the list stopped showing because the API hardcodes both to null and the
+ * PUT accepts neither — the dialog was offering to save what nothing could store. Mentor becomes
+ * a picker for the same reason it is one on the invite: the column is a uuid foreign key, so a
+ * typed name was never going anywhere.
+ */
 const ManageStaffModal: React.FC<{
     staff: TeamRow
+    mentorOptions: Array<{ id: string; name: string; email: string }>
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
-}> = ({ staff, onClose, onUpdate }) => {
-    const [formData, setFormData] = useState({
-        name: staff.name || "",
-        email: staff.email || "",
-        position: staff.position || "",
-        country: staff.country || "",
-        company_email: staff.company_email || "",
-        mentor: staff.mentor || "",
-        time_zone: staff.time_zone || "",
-        strikes: staff.strikes || "0/3"
-    })
+}> = ({ staff, mentorOptions, onClose, onUpdate }) => {
+    const [firstName, setFirstName] = useState(() => splitName(staff.name || "").first)
+    const [lastName, setLastName] = useState(() => splitName(staff.name || "").last)
+    const [email, setEmail] = useState(staff.email || "")
+    const [position, setPosition] = useState(staff.position || "")
+    const [mentorId, setMentorId] = useState(staff.mentor || "")
+    const [timeZone, setTimeZone] = useState(staff.time_zone || "")
+    const [strikes, setStrikes] = useState(staff.strikes ?? 0)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const handleInputChange = (field: string, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
-    }
-
-    const hasValidEmails = () => {
-        const mainEmailValid = formData.email ? isValidEmail(formData.email) : false
-        const companyEmailValid = formData.company_email ? isValidEmail(formData.company_email) : true
-        return mainEmailValid && companyEmailValid
-    }
+    // Same rule as the invite dialog: everything but the mentor has to be answered. An existing
+    // member with no position or time zone therefore has to be completed before the edit saves.
+    const canSubmit =
+        firstName.trim() !== "" &&
+        lastName.trim() !== "" &&
+        isValidEmail(email) &&
+        position !== "" &&
+        timeZone !== ""
 
     const handleSave = async () => {
         setIsSubmitting(true)
         try {
-            await onUpdate(formData)
+            const name = `${firstName.trim()} ${lastName.trim()}`.trim()
+            await onUpdate({ name, email, position, mentor: mentorId || null, time_zone: timeZone || null, strikes })
             onClose()
         } catch (error) {
             console.error("Error updating staff:", error)
@@ -892,147 +1049,124 @@ const ManageStaffModal: React.FC<{
         }
     }
 
-
-    const positionOptions = [
-        "Founder",
-        "Leadership",
-        "Business Advisor",
-        "Developer",
-        "Designer",
-        "Outreach"
-    ]
-
     return (
         <Modal
             zIndexClass="z-50"
-            backdropClassName="bg-black/50"
-            cardClassName="bg-white rounded-xl p-6 w-full max-w-2xl mx-4"
-            label="Edit Staff Member"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+            label="Edit Staff"
             onClose={onClose}
         >
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                        <FiEdit3 className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Edit Staff Member</h3>
-                </div>
+            <header className="mb-5 flex items-center justify-between gap-4">
+                <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-[#111827]">Edit Staff</h2>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="rounded-lg p-2 text-[#6B7280] transition-colors hover:bg-red-50 hover:text-red-600"
+                >
+                    <FiX className="h-5 w-5" />
+                </button>
+            </header>
 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Name</label>
-                        <input
-                            type="text"
-                            value={formData.name}
-                            onChange={(e) => handleInputChange('name', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Email</label>
-                        <input
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => handleInputChange('email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827] ${
-                                formData.email && !isValidEmail(formData.email)
-                                    ? 'border-red-500 bg-red-50'
-                                    : 'border-[#D1D5DB]'
-                            }`}
-                            required
-                            pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Position</label>
-                        <div className="relative">
-                            <select
-                                value={formData.position}
-                                onChange={(e) => handleInputChange('position', e.target.value)}
-                                className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm pr-10 appearance-none bg-white text-[#111827]"
-                            >
-                                <option value="">Select Position</option>
-                                {positionOptions.map(option => (
-                                    <option key={option} value={option}>{option}</option>
-                                ))}
-                            </select>
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Country</label>
-                        <input
-                            type="text"
-                            value={formData.country}
-                            onChange={(e) => handleInputChange('country', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Timezone</label>
-                        <input
-                            type="text"
-                            value={formData.time_zone}
-                            onChange={(e) => handleInputChange('time_zone', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Company Email</label>
-                        <input
-                            type="email"
-                            value={formData.company_email}
-                            onChange={(e) => handleInputChange('company_email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827] ${
-                                formData.company_email && !isValidEmail(formData.company_email)
-                                    ? 'border-red-500 bg-red-50'
-                                    : 'border-[#D1D5DB]'
-                            }`}
-                            pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Mentor</label>
-                        <input
-                            type="text"
-                            value={formData.mentor}
-                            onChange={(e) => handleInputChange('mentor', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Strikes</label>
-                        <input
-                            type="text"
-                            value={formData.strikes}
-                            onChange={(e) => handleInputChange('strikes', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
-                        />
-                    </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        First Name <span className="text-[#B42318]">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className={FIELD}
+                    />
                 </div>
-                
-                <div className="flex gap-3 justify-end">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={isSubmitting || !hasValidEmails()}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                            isSubmitting || !hasValidEmails()
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                        }`}
-                    >
-                        {isSubmitting ? "Saving..." : "Save Changes"}
-                    </button>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Last Name <span className="text-[#B42318]">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className={FIELD}
+                    />
                 </div>
+                <div className="sm:col-span-2">
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Email <span className="text-[#B42318]">*</span>
+                    </label>
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={email && !isValidEmail(email) ? FIELD_INVALID : FIELD}
+                    />
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Position <span className="text-[#B42318]">*</span>
+                    </label>
+                    <FieldSelect value={position} onChange={setPosition}>
+                        <option value="">Not set</option>
+                        {POSITION_OPTIONS.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                        ))}
+                    </FieldSelect>
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
+                    </label>
+                    <FieldSelect value={mentorId} onChange={setMentorId}>
+                        <option value="">None</option>
+                        {mentorOptions
+                            .filter((option) => option.id !== staff.id)
+                            .map((option) => (
+                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
+                            ))}
+                    </FieldSelect>
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Strikes <span className="text-[#B42318]">*</span>
+                    </label>
+                    <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
+                        {[0, 1, 2, 3].map((n) => (
+                            <option key={n} value={n}>{n}/3</option>
+                        ))}
+                    </FieldSelect>
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Time Zone <span className="text-[#B42318]">*</span>
+                    </label>
+                    <FieldSelect value={timeZone} onChange={setTimeZone}>
+                        <option value="">Select A Time Zone</option>
+                        {TIME_ZONE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {timeZoneLabel(option.value)}
+                            </option>
+                        ))}
+                    </FieldSelect>
+                </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+                <button
+                    onClick={onClose}
+                    className="h-9 rounded-[10px] bg-[#F4F2F8] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3]"
+                >
+                    Cancel
+                </button>
+                <button
+                    onClick={handleSave}
+                    disabled={isSubmitting || !canSubmit}
+                    className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    {isSubmitting ? "Saving…" : "Save Changes"}
+                </button>
+            </div>
         </Modal>
     )
 }

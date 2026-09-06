@@ -102,6 +102,9 @@ export function useBookingSlots(slug: string, daysAhead: number = 60, timezone: 
 
   useEffect(() => {
     if (!slug) return;
+    // Fetching is the effect's whole purpose, and the pending flag has to flip before it starts or
+    // the picker renders stale slots as though they were current.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     // Request the max window (default endpoint window is only 14 days) so the calendar's
     // month navigation has more than a couple weeks of real data to page through.
@@ -139,6 +142,9 @@ export function useBookingSlots(slug: string, daysAhead: number = 60, timezone: 
     if (viewMonth || slotsByDay.size === 0) return;
     const firstKey = [...slotsByDay.keys()].sort()[0];
     const [y, m, d] = firstKey.split("-").map(Number);
+    // Anchoring once, after slots arrive. Deriving this during render instead would fight
+    // goToMonth, which is the bug the comment above describes — every month click undid itself.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedDay(firstKey);
     setViewMonth(new Date(y, m - 1, d));
   }, [slotsByDay, viewMonth]);
@@ -156,6 +162,9 @@ export function useBookingSlots(slug: string, daysAhead: number = 60, timezone: 
     if (prevTimezoneRef.current === timezone) return;
     prevTimezoneRef.current = timezone;
     if (slotsByDay.size === 0) {
+      // Re-anchoring on a timezone change, for the reason above: deferring it to the effect
+      // before this one rendered an empty calendar for a frame on every switch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewMonth(null);
       setSelectedDay("");
       return;

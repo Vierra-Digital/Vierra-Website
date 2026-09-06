@@ -89,7 +89,7 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
   // invite ever grants "admin" (no in-app path writes that role anywhere).
   const { data: invitation } = await admin
     .from("invitations")
-    .select("id, company_id")
+    .select("id, company_id, first_name, last_name, position, mentor_id, time_zone, strikes")
     .eq("email", normalizedEmail)
     .is("accepted_at", null)
     .gt("expires_at", new Date().toISOString())
@@ -97,22 +97,60 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
     .limit(1)
     .maybeSingle();
   if (invitation) {
-    const inv = invitation as { id: string; company_id: string };
+    const inv = invitation as {
+      id: string;
+      company_id: string;
+      first_name: string | null;
+      last_name: string | null;
+      position: string | null;
+      mentor_id: string | null;
+      time_zone: string | null;
+      strikes: number | null;
+    };
     const vierraCompanyId = await getVierraCompanyId();
 
     if (inv.company_id === vierraCompanyId) {
-      const { error: membershipError } = await admin
-        .from("company_memberships")
-        .insert({ company_id: inv.company_id, user_id: authUser.id, role: "staff", status: "active" });
+      // Staff detail the inviter filled in rides on the invitation until here, because this is the
+      // first moment there is a membership row to put it on. Role is not among it: role model v2
+      // makes every accepted invite staff.
+      const { error: membershipError } = await admin.from("company_memberships").insert({
+        company_id: inv.company_id,
+        user_id: authUser.id,
+        role: "staff",
+        status: "active",
+        position: inv.position,
+        mentor_id: inv.mentor_id,
+        strikes: inv.strikes ?? 0,
+      });
       if (!membershipError) {
+        // The inviter said who this is; the account itself has no name until the person sets one.
+        // Only filled in when it is still blank, so an invite never overwrites a name its owner
+        // has already chosen.
+        const invitedName = [inv.first_name, inv.last_name].filter(Boolean).join(" ").trim();
+        if (invitedName && !name) {
+          await admin.from("users").update({ name: invitedName }).eq("id", authUser.id);
+        }
+        if (inv.time_zone) {
+          // Time zone lives on user_preferences, not the membership.
+          await admin
+            .from("user_preferences")
+            .upsert({ user_id: authUser.id, time_zone: inv.time_zone }, { onConflict: "user_id" });
+        }
         await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
         return {
           kind: "member",
-          user: { id: authUser.id, email, role: "staff", name },
+          user: {
+            id: authUser.id,
+            email,
+            role: "staff",
+            name: name ?? ([inv.first_name, inv.last_name].filter(Boolean).join(" ").trim() || null),
+          },
           companyId: inv.company_id,
         };
       }
     } else {
+      // An invite against any other company makes the person that company's client, not staff.
+      // Nothing above applies to a client row, so the staff detail is deliberately dropped here.
       const { data: company } = await admin
         .from("companies")
         .select("name")

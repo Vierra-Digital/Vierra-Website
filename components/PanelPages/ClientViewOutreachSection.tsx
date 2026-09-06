@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { inter } from "@/lib/fonts";
-import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
+import { PanelHeader } from "@/components/panel/PanelTable";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Modal from "@/components/ui/Modal";
 import { FiGlobe, FiHeart, FiMail, FiMessageCircle, FiMoreHorizontal, FiRepeat, FiSend, FiThumbsUp } from "react-icons/fi";
@@ -332,7 +332,7 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-8">
-          <PanelSectionHeader
+          <PanelHeader
             title={
               step === "cards"
                 ? "Outreach"

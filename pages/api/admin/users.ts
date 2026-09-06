@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseAuthUser, deleteSupabaseAuthUser, updateSupabaseAuthUserEmail } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { computePresenceStatus } from "@/lib/presence";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
@@ -57,14 +58,143 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mentor: m.mentor_id ?? null,
           strikes: m.strikes,
           time_zone: u.user_preferences?.time_zone ?? null,
-          status: m.status,
+          // Derived, not read: sign-out and session-expiry paths write "offline" without
+          // clearing last_active_at, so the stored word says offline for someone heartbeating
+          // right now. lib/presence.ts is the same helper Staff Orbital and the dashboard use.
+          status: computePresenceStatus(m.last_active_at),
           lastActiveAt: m.last_active_at ? m.last_active_at.toISOString() : null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
           hasPassword: false,
           isSelf: u.id === session.user.id,
         };
       });
-      return res.status(200).json(shaped);
+      /**
+       * Client accounts have a `clients` row but no company membership, so a membership-only
+       * query listed staff and admins and quietly omitted every client — the page called "User
+       * Management" showed a subset of users. Clients are appended with role "client" and the
+       * same shape, so the table renders them without special-casing.
+       */
+      // Not scoped: a client belongs to its own company, so filtering by the caller's company
+      // returned nothing at all. Role model v2 lets any Vierra staff member see every client,
+      // the same rule /api/session/listClientSessions follows.
+      const clients = await prisma.client.findMany({
+        select: {
+          id: true,
+          user_id: true,
+          name: true,
+          email: true,
+          business_name: true,
+          company_id: true,
+          companies: { select: { name: true } },
+        },
+      });
+      // A client whose user_id already appears as a member would otherwise be listed twice.
+      const memberUserIds = new Set(shaped.map((row) => row.id));
+      const shapedClients = clients
+        .filter((c) => !c.user_id || !memberUserIds.has(c.user_id))
+        .map((c) => ({
+          id: c.user_id ?? `client:${c.id}`,
+          name: c.name,
+          email: c.email,
+          role: "client",
+          position: c.business_name ?? null,
+          country: null,
+          company_email: null,
+          mentor: null,
+          strikes: 0,
+          time_zone: null,
+          status: "offline",
+          lastActiveAt: null,
+          clientName: c.name,
+          companyName: c.companies?.name ?? null,
+          isPlatformAdmin: false,
+          hasPassword: false,
+          isSelf: false,
+          // Clients have no auth user until they accept an invite; the UI needs to know that a
+          // row cannot be managed like a member before offering member-only actions on it.
+          hasAccount: Boolean(c.user_id),
+        }));
+
+      /**
+       * Last successful sign-in per user, in one round trip.
+       *
+       * DISTINCT ON is the point: login_attempts holds every attempt ever made, so fetching them
+       * and reducing in JS would pull the whole history to pick one row per person. Postgres
+       * returns the first row of each user_id group, and the ORDER BY decides which that is.
+       */
+      const everyone = [...shaped, ...shapedClients];
+      const realUserIds = everyone.map((row) => row.id).filter((id) => !id.startsWith("client:"));
+      const lastLogins = realUserIds.length
+        ? await prisma.$queryRaw<Array<{ user_id: string; attempted_at: Date; ip_address: string | null }>>`
+            SELECT DISTINCT ON (user_id) user_id, attempted_at, ip_address
+            FROM login_attempts
+            WHERE success = true AND user_id = ANY(${realUserIds}::uuid[])
+            ORDER BY user_id, attempted_at DESC
+          `
+        : [];
+      const loginByUser = new Map(lastLogins.map((row) => [row.user_id, row]));
+
+      /**
+       * Invitations that were sent and never accepted. They have no user row at all, so a page
+       * listing users could not show them — someone invited a week ago was simply absent, with
+       * nothing to say whether the invite had been sent.
+       */
+      const pendingInvites = await prisma.invitation.findMany({
+        where: {
+          accepted_at: null,
+          company_id: companyId,
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          created_at: true,
+          expires_at: true,
+          companies: { select: { name: true } },
+        },
+        orderBy: { created_at: "desc" },
+      });
+      const nowForInvites = new Date();
+      const shapedInvites = pendingInvites.map((invite) => ({
+        id: `invite:${invite.id}`,
+        name: null,
+        email: invite.email,
+        role: invite.role,
+        position: null,
+        country: null,
+        company_email: null,
+        mentor: null,
+        strikes: 0,
+        time_zone: null,
+        status: "offline",
+        lastActiveAt: null,
+        clientName: null,
+        companyName: invite.companies?.name ?? null,
+        isPlatformAdmin: false,
+        hasPassword: false,
+        isSelf: false,
+        hasAccount: false,
+        lastLoginAt: null,
+        lastLoginIp: null,
+        pendingInvite: {
+          id: invite.id,
+          invitedAt: invite.created_at.toISOString(),
+          expiresAt: invite.expires_at.toISOString(),
+          expired: invite.expires_at.getTime() < nowForInvites.getTime(),
+        },
+      }));
+
+      const withLogins = everyone.map((row) => {
+        const login = loginByUser.get(row.id);
+        return {
+          ...row,
+          lastLoginAt: login ? login.attempted_at.toISOString() : null,
+          lastLoginIp: login?.ip_address ?? null,
+          pendingInvite: null,
+        };
+      });
+
+      return res.status(200).json([...withLogins, ...shapedInvites]);
     } catch (e) {
       console.error("admin/users GET", e);
       return res.status(500).json({ message: "Internal Server Error" });
@@ -229,18 +359,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "You cannot remove your own account" });
     }
     try {
-      // Only delete users who belong to the caller's own (fixed Vierra) company — never any
-      // user id system-wide.
-      const target = await prisma.companyMembership.findFirst({
-        where: { company_id: companyId, user_id: String(userId) },
-        select: { user_id: true, role: true },
+      /**
+       * A user belongs to a company through one of two tables, and this only ever looked at one.
+       *
+       * Staff have a company_memberships row; client accounts have a clients row and no
+       * membership at all. Looking only at memberships meant every client came back "User not
+       * found" — removal failed for exactly the accounts this page was extended to list.
+       *
+       * Both routes are checked. Scope and the admin guard follow role model v2: one fixed
+       * company, and admins are removed elsewhere.
+       */
+      const target = await prisma.user.findUnique({
+        where: { id: String(userId) },
+        select: {
+          id: true,
+          company_memberships_company_memberships_user_idTousers: { select: { company_id: true, role: true } },
+          clients_clients_user_idTousers: { select: { company_id: true } },
+        },
       });
-      if (!target) return res.status(404).json({ message: "User not found" });
-      if (target.role === "admin") {
+      const membership = target?.company_memberships_company_memberships_user_idTousers ?? null;
+      const clientRow = target?.clients_clients_user_idTousers ?? null;
+      const belongs = membership?.company_id === companyId || Boolean(clientRow);
+      // Same 404 as an unknown id: a caller with no business here learns nothing either way.
+      if (!target || !belongs) return res.status(404).json({ message: "User not found" });
+      if (membership?.role === "admin") {
         return res.status(403).json({ message: "Admin accounts can't be removed here." });
       }
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });
+      /**
+       * The Auth identity has to go with the profile row. Deleting only public.users left the
+       * account able to sign in against a user row that no longer exists, and kept the address
+       * taken — which is why re-creating a removed person came back "Email already exists".
+       *
+       * Not fatal if it fails: the profile row is already gone and the caller's request
+       * succeeded. Logged loudly, because what it leaves behind is exactly that orphan.
+       */
+      await deleteSupabaseAuthUser(String(userId)).catch((cleanupErr) =>
+        console.error("admin/users DELETE: profile removed but auth user remains", userId, cleanupErr)
+      );
       return res.status(200).json({ deleted: userId });
     } catch (e) {
       console.error("admin/users DELETE", e);

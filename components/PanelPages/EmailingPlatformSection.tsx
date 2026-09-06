@@ -59,6 +59,8 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal from "@/components/ui/PromptModal";
 import { MdRefresh } from "react-icons/md";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
+
+import { isSafeEmailHref, stripRemoteUrlsFromStyle, UNSAFE_EMAIL_TAG_SELECTOR } from "@/lib/email/htmlSafety";
 import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import { printComposeContent } from "@/components/email/printCompose";
 import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
@@ -1767,11 +1769,25 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (typeof window === "undefined") return rawHtml;
     const parser = new window.DOMParser();
     const parsed = parser.parseFromString(rawHtml, "text/html");
-    parsed.querySelectorAll("script, style, iframe, object, embed").forEach((node) => node.remove());
+    parsed.querySelectorAll(UNSAFE_EMAIL_TAG_SELECTOR).forEach((node) => node.remove());
     parsed.querySelectorAll<HTMLElement>("*").forEach((node) => {
       Array.from(node.attributes).forEach((attribute) => {
         if (/^on/i.test(attribute.name)) node.removeAttribute(attribute.name);
       });
+      // Stripping on* handlers does not cover a javascript: destination: the scheme was never
+      // checked, so a link in an email anyone can send ran script here as soon as it was clicked.
+      for (const attr of ["href", "xlink:href", "action", "formaction", "src"]) {
+        const value = node.getAttribute(attr);
+        if (value !== null && !isSafeEmailHref(value)) node.removeAttribute(attr);
+      }
+      // A background:url() beacons the reader IP and open time on render — the same signal the
+      // pixel stripping below exists to withhold, arriving through CSS instead.
+      const style = node.getAttribute("style");
+      if (style) {
+        const safe = stripRemoteUrlsFromStyle(style);
+        if (safe) node.setAttribute("style", safe);
+        else node.removeAttribute("style");
+      }
     });
     const isInternalOpenTrackingPixel = (srcValue: string) => {
       const src = (srcValue || "").trim();
@@ -5339,7 +5355,7 @@ ${sourceText}`;
                                               <td className="px-4 py-3 text-right">
                                                 <div className="inline-flex justify-end">
                                                   <RowActionMenu label={`Manage ${displayName}`} menuWidthClassName="w-44">
-                                                    <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
+                                                    <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />}>
                                                       Edit Contact
                                                     </RowActionMenuItem>
                                                     <RowActionMenuItem onClick={() => deleteContact(contact)} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">

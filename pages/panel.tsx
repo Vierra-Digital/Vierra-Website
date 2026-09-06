@@ -19,19 +19,30 @@ import {
   FiGlobe,
   FiFileText,
   FiUsers,
-  FiPercent,
   FiFile,
   FiUserCheck,
-  FiCpu,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
-import { useActiveClient } from "@/lib/activeClient"
-import { panelFetch } from "@/lib/panelFetch"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
-import { usePageLeaveGuard } from "@/hooks/useDraftGuard"
-import { confirmDiscardDrafts, draftState } from "@/lib/panel/drafts"
+import { useActiveClient } from "@/lib/activeClient"
 import { PANEL_SECTIONS, resolvePanelSection } from "@/lib/panel/navigation"
+import { confirmDiscardDrafts } from "@/lib/panel/drafts"
+import { usePageLeaveGuard } from "@/hooks/useDraftGuard"
+
+/**
+ * The sections this file actually mounts. PANEL_SECTIONS is wider — it still carries ltv, blog and
+ * artemis, which this branch removed from the panel — so a URL naming one of those has to be caught
+ * here instead of switching to a section with nothing behind it.
+ */
+const RENDERED_SECTIONS = new Set([0, 1, 2, 5, 6, 8, 9, 10])
+
+/**
+ * Sections whose markup is gated on !isStaff. resolvePanelSection already withholds 8 and 9 from
+ * staff, but not 1 — it has no reason to, since Clients is staff-visible on master. Here it is not,
+ * so a staff member following ?section=clients would land on a section that renders nothing.
+ */
+const ADMIN_ONLY_SECTIONS = new Set([1, 8, 9])
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
   { ssr: false }
@@ -53,10 +64,6 @@ const TeamPanelSection = dynamic(
   () => import("@/components/PanelPages/TeamPanelSection"),
   { ssr: false }
 )
-const LtvCalculatorSection = dynamic(
-  () => import("@/components/PanelPages/LTVCalculatorSection"),
-  { ssr: false }
-)
 const OutreachSection = dynamic(
   () => import("@/components/PanelPages/OutreachSection"),
   { ssr: false }
@@ -65,20 +72,12 @@ const ProjectManagement = dynamic(
   () => import("../components/PanelPages/ProjectManagement"),
   { ssr: false }
 )
-const BlogEditorSection = dynamic(
-  () => import("@/components/PanelPages/BlogEditorSection"),
-  { ssr: false }
-)
 const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
   { ssr: false }
 )
 const FilesSection = dynamic(
   () => import("@/components/PanelPages/FilesSection"),
-  { ssr: false }
-)
-const ArtemisSection = dynamic(
-  () => import("@/components/PanelPages/ArtemisSection"),
   { ssr: false }
 )
 const ClientViewOutreachSection = dynamic(
@@ -108,7 +107,6 @@ const SECTION_VERSION_DOMAIN: Record<number, string> = {
   2: "team",
   5: "outreach",
   6: "projects",
-  7: "blog",
   8: "team",
   10: "files",
 }
@@ -116,6 +114,16 @@ const SECTION_VERSION_DOMAIN: Record<number, string> = {
 const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: PanelPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
+  const [navigationNotice, setNavigationNotice] = useState("")
+  /**
+   * Sections stay mounted behind display:none so returning to one is instant, which also means it
+   * shows whatever it last loaded. Files is the one where that is visibly wrong — a PDF filed from
+   * the signer belongs in the list the moment the reader opens it — so each visit bumps this and
+   * the section refetches.
+   */
+  const [filesVisitCount, setFilesVisitCount] = useState(0)
+  const clientListScrollRef = useRef(0)
+  const clientListReturnIdRef = useRef("")
   const [currentSection, setCurrentSection] = useState(0);
   // Section 0 is always mounted; section 1 (Clients) joins it immediately for admins, who land
   // there most often right after Dashboard. Seeded here rather than added by an effect — this is
@@ -125,13 +133,9 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     initialUserRole === "admin" ? new Set([0, 1]) : new Set([0])
   )
   const [sectionEpoch, setSectionEpoch] = useState<Record<number, number>>({})
-  const [pendingRefresh, setPendingRefresh] = useState<number[]>([])
-  const [navigationNotice, setNavigationNotice] = useState("")
   const lastSectionVersionsRef = useRef<Record<string, string>>({})
   const visitedSectionsRef = useRef<Set<number>>(new Set([0]))
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const clientListScrollRef = useRef(0)
-  const clientListReturnIdRef = useRef("")
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
@@ -141,10 +145,52 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
+  const { setActiveClient } = useActiveClient()
+
+  /**
+   * The section lives in the URL, so Back/Forward and bookmarks work and a link can point at a
+   * particular page of the panel. The nav buttons only push; this effect is the single place that
+   * turns a URL into state, which is why they do not set it themselves.
+   *
+   * resolvePanelSection is shared with master and still knows the sections this branch dropped
+   * (ltv, blog, artemis — LTV is a modal now). Those resolve to a number nothing renders, so they
+   * are checked against what is actually mounted and fall back to Dashboard with a notice rather
+   * than showing an empty panel.
+   */
+  useEffect(() => {
+    if (!router.isReady) return
+    const resolved = resolvePanelSection(router.query.section, resolvedUserRole)
+    const available =
+      RENDERED_SECTIONS.has(resolved.section) &&
+      !(resolvedUserRole === "staff" && ADMIN_ONLY_SECTIONS.has(resolved.section))
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentSection(available ? resolved.section : 0)
+    setNavigationNotice(
+      resolved.invalid || !available ? "This page is unavailable. Showing Dashboard." : ""
+    )
+  }, [router.isReady, router.query.section, resolvedUserRole])
+
+  usePageLeaveGuard()
+
+  const navigateSection = (section: number) => {
+    void (async () => {
+      if (!(await confirmDiscardDrafts())) return
+      if (section === 10) setFilesVisitCount((count) => count + 1)
+      setShowSettings(false)
+      setIsSidebarOpen(false)
+      await router
+        .push(
+          { pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section] } },
+          undefined,
+          { shallow: true, scroll: false }
+        )
+        .catch(() => {})
+    })()
+  }
+
   const isAdmin = resolvedUserRole === "admin"
   const isStaff = resolvedUserRole === "staff"
   const canAccessEmailPanel = isAdmin || isStaff
-  const { setActiveClient } = useActiveClient()
 
   // Moved above the effect that calls it. As a hoisted function declaration its position never
   // affected behaviour, but referencing it from further up the file read as a use-before-
@@ -198,7 +244,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
 
   const checkSectionVersions = useCallback(async () => {
     try {
-      const res = await panelFetch("/api/panel/section-versions", { cache: "no-store" })
+      const res = await fetch("/api/panel/section-versions", { cache: "no-store" })
       if (!res.ok) return
       const data: Record<string, string> = await res.json()
       const changedDomains = new Set<string>()
@@ -208,14 +254,10 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
         lastSectionVersionsRef.current[domain] = version
       }
       if (changedDomains.size === 0) return
-      const deferred = Object.entries(SECTION_VERSION_DOMAIN)
-        .filter(([key, domain]) => changedDomains.has(domain) && draftState(key).dirty)
-        .map(([key]) => Number(key))
-      if (deferred.length) setPendingRefresh(prev => [...new Set([...prev, ...deferred])])
       setSectionEpoch((prev) => {
         const next = { ...prev }
         Object.entries(SECTION_VERSION_DOMAIN).forEach(([sectionKey, domain]) => {
-          if (changedDomains.has(domain) && !deferred.includes(Number(sectionKey))) {
+          if (changedDomains.has(domain)) {
             const sectionNum = Number(sectionKey)
             next[sectionNum] = (next[sectionNum] || 0) + 1
           }
@@ -262,32 +304,27 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   }, [router.isReady, router.query.settings]);
 
   useActivityHeartbeat();
-  usePageLeaveGuard();
-
-  useEffect(() => {
-    if (!router.isReady) return;
-    const resolved = resolvePanelSection(router.query.section, resolvedUserRole);
-    // URL navigation includes browser Back/Forward and direct bookmarks.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    setCurrentSection(resolved.section);
-    setShowSettings(router.query.settings === "1");
-    setNavigationNotice(resolved.invalid ? "This page is unavailable. Showing Dashboard." : "");
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [router.isReady, router.query.section, router.query.settings, resolvedUserRole]);
-
-  const navigateSection = (section: number) => {
-    void router.push({ pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section], settings: "0" } }, undefined, { shallow: true, scroll: false }).catch(() => {});
-    setIsSidebarOpen(false);
-  };
-
-  const navigateSettings = (open: boolean) => {
-    void router.push({ pathname: "/panel", query: { ...router.query, settings: open ? "1" : "0" } }, undefined, { shallow: true, scroll: false }).catch(() => {});
-  };
 
 
+
+  /**
+   * Scoped to "client": a draft belonging to the client workspace should be settled before moving
+   * within it, while a draft elsewhere in the panel is not this navigation's business.
+   */
+  const navigateViewModeSection = (section: 0 | 1 | 2 | 3) => {
+    void (async () => {
+      if (!(await confirmDiscardDrafts("client"))) return
+      setViewModeSection(section)
+      setShowSettings(false)
+      setIsSidebarOpen(false)
+    })()
+  }
 
   const enterClientViewMode = async (client: { id: string; name: string; email: string }) => {
     if (!(await confirmDiscardDrafts())) return
+    // Where to put the reader back when they return: the row they opened, and the scroll offset
+    // the list was at. Without both, leaving a workspace dropped them at the top of an unfamiliar
+    // list with focus on the body.
     clientListScrollRef.current = document.getElementById("right-side-body")?.scrollTop ?? 0
     clientListReturnIdRef.current = `open-client-${client.id}`
     setViewClient(client)
@@ -296,21 +333,28 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     setCurrentSection(1)
     setShowSettings(false)
     setIsSidebarOpen(false)
-    requestAnimationFrame(() => document.getElementById("client-workspace-title")?.focus())
   }
 
-  const exitClientViewMode = async () => {
-    if (!(await confirmDiscardDrafts("client"))) return
-    setIsClientViewMode(false)
-    setViewClient(null)
-    setViewModeSection(0)
-    setCurrentSection(1)
-    setShowSettings(false)
+  /**
+   * Runs after the state change has been queued, so the list is back on screen by the time the
+   * frame fires and there is something to focus and scroll.
+   */
+  const restoreClientList = () => {
     requestAnimationFrame(() => {
       document.getElementById(clientListReturnIdRef.current)?.focus({ preventScroll: true })
       const body = document.getElementById("right-side-body")
       if (body) body.scrollTop = clientListScrollRef.current
     })
+  }
+
+  const exitClientViewMode = async () => {
+    if (!(await confirmDiscardDrafts("client"))) return
+    restoreClientList()
+    setIsClientViewMode(false)
+    setViewClient(null)
+    setViewModeSection(0)
+    setCurrentSection(1)
+    setShowSettings(false)
   }
 
 
@@ -321,7 +365,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
         <meta name="robots" content="noindex,nofollow" />
       </Head>
       <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
-        <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#6B1BC4] border-r border-white/[0.09] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[224px]" : "w-0 invisible md:visible"} md:w-[224px] overflow-hidden`}>
+        <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#6B1BC4] border-r border-white/[0.09] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[224px]" : "w-0"} md:w-[224px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full shrink-0 flex items-center justify-center px-4 pt-7 pb-6">
             <Link href="/">
               <Image
@@ -333,28 +377,28 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               />
             </Link>
           </div>
-          <nav id="panel-nav" aria-label={isClientViewMode ? "Client workspace" : "Admin panel"} className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[14px] items-center text-[#EDF1F5] pt-0 pb-5">
+          <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[14px] items-center text-[#EDF1F5] pt-0 pb-5">
             {isClientViewMode ? (
               <>
-                <button type="button" aria-current={viewModeSection === 0 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 0 && !showSettings ? "page" : undefined} onClick={() => navigateViewModeSection(0)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGrid className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
                 </button>
-                <button type="button" aria-current={viewModeSection === 2 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 2 && !showSettings ? "page" : undefined} onClick={() => navigateViewModeSection(2)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGlobe className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Outreach
                   </span>
                 </button>
-                <button type="button" aria-current={viewModeSection === 3 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 3 && !showSettings ? "page" : undefined} onClick={() => navigateViewModeSection(3)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFileText className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Context
                   </span>
                 </button>
-                <button type="button" aria-current={viewModeSection === 1 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 1 && !showSettings ? "page" : undefined} onClick={() => navigateViewModeSection(1)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Files
@@ -363,42 +407,41 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               </>
             ) : (
               <>
-                <button type="button" aria-current={currentSection === 0 && !showSettings ? "page" : undefined} onClick={() => navigateSection(0)} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={currentSection === 0 && !showSettings ? "page" : undefined} onClick={() => navigateSection(0)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGrid className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
                 </button>
-                <button type="button" aria-current={currentSection === 1 && !showSettings ? "page" : undefined} onClick={() => navigateSection(1)} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
-                  <FiUsers className="w-4 h-4 shrink-0" />
-                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    Clients
-                  </span>
-                </button>
-                <button type="button" aria-current={currentSection === 2 && !showSettings ? "page" : undefined} onClick={() => navigateSection(2)} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                {!isStaff && (
+                  <button type="button" aria-current={currentSection === 1 && !showSettings ? "page" : undefined} onClick={() => navigateSection(1)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                    <FiUsers className="w-4 h-4 shrink-0" />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
+                      Clients
+                    </span>
+                  </button>
+                )}
+                <button type="button" aria-current={currentSection === 2 && !showSettings ? "page" : undefined} onClick={() => navigateSection(2)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiUserCheck className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Staff Orbital
                   </span>
                 </button>
                 {canAccessEmailPanel && (
-                  <button
-                    type="button"
-                    onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }}
-                    className="w-[calc(100%-16px)] shrink-0 flex min-h-[36px] flex-row items-center rounded-lg gap-x-3 px-3 py-1 text-left transition-colors duration-150 hover:bg-white hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                    aria-label="Email Panel (opens in a new tab)"
-                  >
+                  <button type="button" onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }} className="w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 hover:bg-white hover:text-black">
                     <FiMail className="w-4 h-4 shrink-0" />
-                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>Email Panel</span>
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
+                      Email Panel
+                    </span>
                   </button>
                 )}
-                <button type="button" aria-current={currentSection === 5 && !showSettings ? "page" : undefined} onClick={() => navigateSection(5)} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 5 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={currentSection === 5 && !showSettings ? "page" : undefined} onClick={() => navigateSection(5)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 5 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGlobe className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Marketing Tracker
                   </span>
                 </button>
-                <button type="button" aria-current={currentSection === 6 && !showSettings ? "page" : undefined} onClick={() => navigateSection(6)} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={currentSection === 6 && !showSettings ? "page" : undefined} onClick={() => navigateSection(6)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Project Tasks
@@ -406,9 +449,11 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 </button>
                 
                 {!isStaff && (
-                  <button type="button" aria-current={currentSection === 9 && !showSettings ? "page" : undefined}
+                  <button
+                    type="button"
+                    aria-current={currentSection === 9 && !showSettings ? "page" : undefined}
                     onClick={() => navigateSection(9)}
-                    className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 9 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 9 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
                     <FiFile />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
@@ -416,27 +461,11 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                     </span>
                   </button>
                 )}
-                <button type="button" aria-current={currentSection === 4 && !showSettings ? "page" : undefined}
-                  onClick={() => navigateSection(4)}
-                  className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 4 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
-                >
-                  <FiPercent className="w-4 h-4 shrink-0" />
-                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    LTV Calculator
-                  </span>
-                </button>
-                <button type="button" aria-current={currentSection === 7 && !showSettings ? "page" : undefined}
-                  onClick={() => navigateSection(7)}
-                  className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 7 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
-                >
-                  <FiFileText className="w-4 h-4 shrink-0" />
-                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    Blog Editor
-                  </span>
-                </button>
-                <button type="button" aria-current={currentSection === 10 && !showSettings ? "page" : undefined}
+                <button
+                  type="button"
+                  aria-current={currentSection === 10 && !showSettings ? "page" : undefined}
                   onClick={() => navigateSection(10)}
-                  className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 10 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 10 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
@@ -444,20 +473,11 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   </span>
                 </button>
                 {!isStaff && (
-                  <button type="button" aria-current={currentSection === 11 && !showSettings ? "page" : undefined}
-                    onClick={() => navigateSection(11)}
-                    className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 11 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
-                  >
-                    <FiCpu className="w-4 h-4 shrink-0" />
-                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                      Artemis
-                    </span>
-                  </button>
-                )}
-                {!isStaff && (
-                  <button type="button" aria-current={currentSection === 8 && !showSettings ? "page" : undefined}
+                  <button
+                    type="button"
+                    aria-current={currentSection === 8 && !showSettings ? "page" : undefined}
                     onClick={() => navigateSection(8)}
-                    className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 8 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 8 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
                     <FiShield className="w-4 h-4 shrink-0" />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
@@ -467,7 +487,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 )}
               </>
             )}
-          </nav>
+          </div>
 
           {/* One nav-item-height gap above the bottom action. The nav list above is
               flex-1 + scrollable, so it absorbs extra height and this gap only
@@ -482,7 +502,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 type="button"
                 aria-label="Open user settings"
                 aria-expanded={showSettings}
-                onClick={() => navigateSettings(!showSettings)}
+                onClick={() => setShowSettings((prev) => !prev)}
                 className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 ${showSettings ? "bg-white/[0.08]" : "hover:bg-white/[0.05]"}`}
               >
                 <ProfileImage
@@ -502,7 +522,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
 
             {isClientViewMode ? (
               <button
-                onClick={exitClientViewMode}
+                onClick={() => void exitClientViewMode()}
                 className="group w-[calc(100%-16px)] flex h-[34px] flex-row items-center gap-x-2.5 px-3 justify-start rounded-lg text-white bg-transparent hover:bg-white/[0.09] transition-colors duration-150"
               >
                 <FiArrowLeft className="w-4 h-4 shrink-0" />
@@ -514,17 +534,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
           </div>
         </div>
         <div id="right-side" className="flex flex-col flex-1 min-w-0 h-full relative overflow-x-hidden">
-          <div className="shrink-0 flex flex-wrap items-center gap-3 border-b border-gray-100 py-2 pl-16 pr-4 md:px-6 text-sm">
-            <span role="status">{navigationNotice}</span>
-            {pendingRefresh.includes(currentSection) && <div role="status" className="flex flex-wrap items-center gap-2 text-amber-800">
-              New data available. Your edits have been kept.
-              <button type="button" className="rounded underline" onClick={() => { void (async () => {
-                if (!(await confirmDiscardDrafts(String(currentSection)))) return;
-                setSectionEpoch(prev => ({ ...prev, [currentSection]: (prev[currentSection] || 0) + 1 }));
-                setPendingRefresh(prev => prev.filter(section => section !== currentSection));
-              })(); }}>Reload this page</button>
-            </div>}
-          </div>
           {/* Section wrappers are plain block divs, so as flex items with no grow they
               shrink-to-fit their content — every page rendered at its content width and sat
               left with dead space beside it, which got worse the wider the display. Forcing
@@ -535,33 +544,13 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             aria-label="Toggle sidebar"
-            aria-expanded={isSidebarOpen}
-            aria-controls="left-side"
             className="md:hidden absolute left-3 top-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECE9F3] bg-white/95 text-[#701CC0] shadow-sm backdrop-blur"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          {isClientViewMode && viewClient && !showSettings && (
-            <div className="shrink-0 border-b border-purple-100 bg-purple-50 py-3 pl-16 pr-4 md:px-6">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0 break-words">
-                  <p id="client-workspace-title" tabIndex={-1} className="text-sm font-semibold text-[#4C1D95]">Managing {viewClient.name || viewClient.email}</p>
-                  <p className="text-xs text-[#6B7280]">{viewClient.email}</p>
-                </div>
-                <button type="button" onClick={exitClientViewMode} className="rounded-lg border border-purple-200 bg-white px-3 py-2 text-sm font-medium text-[#701CC0] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#701CC0]">Exit client workspace</button>
-              </div>
-              <p className="mt-2 text-xs text-[#6B7280]">
-                {viewModeSection === 0
-                  ? "Shared dashboard: company figures use your active company selection; activity and meetings include your own account data."
-                  : viewModeSection === 1
-                    ? "Files for this client. Your staff permissions allow deletion of unprotected files."
-                    : "Changes on this page apply to this client."}
-              </p>
-            </div>
-          )}
-          <div id="right-side-body" className="flex w-full flex-1 min-h-0 bg-white overflow-y-auto overflow-x-hidden relative [&>div]:w-full [&>div]:min-w-0">
+          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative [&>div]:w-full [&>div]:min-w-0">
             {/* Mounted immediately on login (not lazily on first click) and kept mounted for the
                 rest of the session — matches the visitedSections pattern below — so switching to
                 Settings never re-triggers its getSettings/gmail/social/calendar fetches. */}
@@ -581,24 +570,16 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                     if (d.imageVersion) setImageVersion(d.imageVersion)
                   }
                 }}
-                onClose={() => navigateSettings(false)}
+                onClose={() => setShowSettings(false)}
                 variant="panel"
               />
             </div>
             <div style={{ display: showSettings ? "none" : undefined }}>
-              {/* Keep the client list mounted while its workspace is open, including
-                  filters, sorting, pagination, and any refreshed list data. */}
-              {visitedSections.has(1) && (
-                <div style={{ display: !isClientViewMode && currentSection === 1 ? undefined : "none" }}>
-                  <ClientsSection
-                    isAdmin={isAdmin}
-                    onAddClient={() => setIsAddClientOpen(true)}
-                    refreshTrigger={clientRefreshTrigger}
-                    onViewClient={enterClientViewMode}
-                    onSetActiveClient={(client) => setActiveClient({ id: client.companyId, name: client.businessName })}
-                  />
-                </div>
-              )}
+              {/* Announced rather than shown: a bookmark to a removed section lands on Dashboard,
+                  and without this the panel just looks like it ignored the link. */}
+              <span role="status" className="sr-only">
+                {navigationNotice}
+              </span>
               {isClientViewMode ? (
                     <>
                       {viewModeSection === 0 && <DashboardSection />}
@@ -615,14 +596,29 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                           <DashboardSection />
                         </div>
                       )}
+                      {visitedSections.has(1) && !isStaff && (
+                        <div style={{ display: currentSection === 1 ? undefined : "none" }}>
+                          {/*
+                            Choosing a client is what scopes the rest of the panel: panelFetch reads
+                            the id back out of the cache and sends it as companyId. onSetActiveClient
+                            was dropped here, so "Set Active" called an undefined callback and nothing
+                            was ever written — every request went out unscoped. isAdmin was dropped
+                            with it, which defaulted to false and hid the admin row actions.
+                          */}
+                          <ClientsSection
+                            isAdmin={isAdmin}
+                            onAddClient={() => setIsAddClientOpen(true)}
+                            refreshTrigger={clientRefreshTrigger}
+                            onViewClient={(client) => void enterClientViewMode(client)}
+                            onSetActiveClient={(client) =>
+                              setActiveClient({ id: client.companyId, name: client.businessName })
+                            }
+                          />
+                        </div>
+                      )}
                       {visitedSections.has(2) && (
                         <div key={`section-2-${sectionEpoch[2] || 0}`} style={{ display: currentSection === 2 ? undefined : "none" }}>
                           <TeamPanelSection userRole={resolvedUserRole} />
-                        </div>
-                      )}
-                      {visitedSections.has(4) && (
-                        <div style={{ display: currentSection === 4 ? undefined : "none" }}>
-                          <LtvCalculatorSection />
                         </div>
                       )}
                       {visitedSections.has(5) && (
@@ -633,15 +629,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {visitedSections.has(6) && (
                         <div key={`section-6-${sectionEpoch[6] || 0}`} style={{ display: currentSection === 6 ? undefined : "none" }}>
                           <ProjectManagement />
-                        </div>
-                      )}
-                      {visitedSections.has(7) && (
-                        <div
-                          key={`section-7-${sectionEpoch[7] || 0}`}
-                          className="w-full pb-24"
-                          style={{ display: currentSection === 7 ? undefined : "none" }}
-                        >
-                          <BlogEditorSection />
                         </div>
                       )}
                       {visitedSections.has(8) && !isStaff && (
@@ -656,12 +643,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       )}
                       {visitedSections.has(10) && (
                         <div key={`section-10-${sectionEpoch[10] || 0}`} style={{ display: currentSection === 10 ? undefined : "none" }}>
-                          <FilesSection />
-                        </div>
-                      )}
-                      {visitedSections.has(11) && !isStaff && (
-                        <div key={`section-11-${sectionEpoch[11] || 0}`} style={{ display: currentSection === 11 ? undefined : "none" }}>
-                          <ArtemisSection />
+                          <FilesSection refreshTrigger={filesVisitCount} />
                         </div>
                       )}
                     </>

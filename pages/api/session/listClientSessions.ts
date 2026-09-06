@@ -12,7 +12,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Any Vierra staff member may see any client's onboarding sessions (see
-    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — not scoped to one company.
+    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — not scoped to one company. This supersedes
+    // the platform-admin exemption this branch had added: master drops the company filter for
+    // every staff role, which covers the same case (a session on a client in another company
+    // showing blank in User Management) and more.
     const sessions = await prisma.onboardingSession.findMany({
       include: {
         clients: true,
@@ -20,6 +23,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       orderBy: { created_at: "desc" },
     });
+
+    /**
+     * Expiry is derived from expires_at, not read from the status column.
+     *
+     * That column only changes when the "Update Sessions" sweep runs, so a session that lapsed an
+     * hour ago still reported itself as pending or in progress until someone pressed the button.
+     * Completed and canceled are terminal and keep their word whatever the date says.
+     */
+    const now = Date.now();
+    const effectiveStatus = (stored: string, expiresAt: Date | null) => {
+      const status = stored || "pending";
+      if (status === "completed" || status === "canceled" || status === "expired") return status;
+      if (expiresAt && expiresAt.getTime() < now) return "expired";
+      return status;
+    };
 
     const sessionList = sessions.map((s) => ({
       token: s.id,
@@ -30,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       expiresAt: s.expires_at?.getTime() || null,
       submittedAt: s.submitted_at?.getTime() || null,
       lastUpdatedAt: s.last_updated_at?.getTime() || null,
-      status: s.status || "pending",
+      status: effectiveStatus(s.status, s.expires_at),
       hasAnswers: !!s.answers,
       platforms: s.onboarding_platform_tokens.map((t) => t.platform),
     }));

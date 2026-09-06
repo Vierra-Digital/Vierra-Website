@@ -24,8 +24,14 @@ export default withAuth(
       take: 5,
     });
 
+    // Never cache presence: the panel polls for it, and a cached response defeats the poll.
+    res.setHeader("Cache-Control", "no-store")
     res.status(200).json({
       staff: rows.map((row) => {
+        // Derived from last_active_at by the shared helper rather than read from the stored
+        // status word, which sign-out and session-expiry paths leave stale. Master's version
+        // replaces the inline derivation this branch had, and grades away/offline in one place
+        // that Staff Orbital reads too.
         const status = computePresenceStatus(row.last_active_at);
         return {
           userId: row.user_id,
