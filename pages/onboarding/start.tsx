@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import Head from "next/head";
 import Image from "next/image";
+import Link from "next/link";
 import { Inter } from "next/font/google";
 import { Loader2, Camera, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/router";
@@ -44,6 +45,7 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [tokens, setTokens] = useState<{ accessToken: string; refreshToken: string } | null>(null);
 
   const stepIndex = STEPS.indexOf(step);
   // How far the wizard has actually gotten — gates which step-indicator dots are clickable.
@@ -60,10 +62,23 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
   useEffect(() => {
     if (initialStep !== "password") return;
     const supabase = getSupabaseBrowserClient();
+    // accept-invite (re-exports this same page) always starts at "password" now, whether or not
+    // its tokens are actually present — see this file's getServerSideProps. Falling back to
+    // "whatever session is already active" only makes sense for the generic self-service entry
+    // point; on the invite-specific route it would silently let a stale/expired link visit reuse
+    // someone else's ambient session instead of surfacing a clear error.
+    const isAcceptInvite = router.pathname.startsWith("/onboarding/accept-invite");
 
     async function bootstrap() {
       const hash = window.location.hash.slice(1);
       const params = new URLSearchParams(hash);
+      const hashError = params.get("error_description");
+      if (hashError) {
+        setError(hashError.replace(/\+/g, " "));
+        setBootstrapState("unauthenticated");
+        return;
+      }
+
       const accessToken = params.get("access_token");
       const refreshToken = params.get("refresh_token");
 
@@ -74,23 +89,48 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
         });
         if (data.session && !error) {
           window.history.replaceState(null, "", window.location.pathname);
+          setTokens({ accessToken, refreshToken });
           setBootstrapState("ready");
         } else {
+          setError("This invite link is invalid or has expired.");
           setBootstrapState("unauthenticated");
         }
         return;
       }
 
+      if (isAcceptInvite) {
+        setError("This invite link is invalid or has expired.");
+        setBootstrapState("unauthenticated");
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
-      setBootstrapState(session ? "ready" : "unauthenticated");
+      if (session) {
+        // A session already exists with no tokens to exchange (e.g. a reload after the hash was
+        // already stripped) — there is nothing left to set a password for here, and
+        // handlePasswordSubmit now hard-requires tokens it will never get on this branch. Skip
+        // straight past the password step rather than getting stuck on one that can't submit.
+        setStep("name");
+        // "name" is always index 1 of the password-led sequence (["password", "name", "photo"]) —
+        // this branch only ever runs when initialStep === "password", so STEPS is fixed to that
+        // sequence for the life of this effect and isn't worth adding as a dependency.
+        setMaxStepIndex((prev) => Math.max(prev, 1));
+        setBootstrapState("ready");
+        return;
+      }
+      setBootstrapState("unauthenticated");
     }
 
     bootstrap();
-  }, [initialStep]);
+  }, [initialStep, router.pathname]);
 
   useEffect(() => {
-    if (bootstrapState === "unauthenticated") router.replace("/login");
-  }, [bootstrapState, router]);
+    // Only auto-redirect when there is nothing to explain — an expired/invalid invite link sets
+    // `error` above and renders its own message instead, the same way /set-password does; bouncing
+    // straight to /login there would show the message for an instant, if at all, before it could
+    // ever be read.
+    if (bootstrapState === "unauthenticated" && !error) router.replace("/login");
+  }, [bootstrapState, error, router]);
 
   const goTo = (s: Step) => {
     setError("");
@@ -105,13 +145,17 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
       setError("Passwords don't match.");
       return;
     }
+    if (!tokens) {
+      setError("This invite link is invalid or has expired. Please request a new one.");
+      return;
+    }
     setIsSubmitting(true);
     setError("");
     try {
       const res = await fetch("/api/auth/setPassword", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to set password.");
@@ -230,6 +274,22 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
         style={{ background: "radial-gradient(120% 120% at 50% -10%, #2e0a4f 0%, #1b0833 45%, #0d0119 100%)" }}
       >
         <Loader2 size={32} className="animate-spin text-white/50" />
+      </div>
+    );
+  }
+
+  if (bootstrapState === "unauthenticated" && error) {
+    return (
+      <div
+        className={`min-h-screen flex items-center justify-center p-4 ${inter.className}`}
+        style={{ background: "radial-gradient(120% 120% at 50% -10%, #2e0a4f 0%, #1b0833 45%, #0d0119 100%)" }}
+      >
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-9 text-center backdrop-blur-2xl">
+          <ErrorAlert>{error}</ErrorAlert>
+          <Link href="/login" className="mt-6 inline-block text-sm text-white/60 hover:text-white/90">
+            Go to login
+          </Link>
+        </div>
       </div>
     );
   }
@@ -522,6 +582,19 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  // Invite links land here (via /onboarding/accept-invite, which re-exports this same function)
+  // carrying their tokens only in the URL hash — invisible to the server. Deciding anything here
+  // off the caller's existing cookie session is wrong for this route specifically: whoever opened
+  // the link might already be logged in as someone else entirely (e.g. staff testing while signed
+  // into /panel), and redirecting them away based on that ambient session would silently discard
+  // the invite before the client ever gets a chance to read its tokens and switch identity via
+  // setSession() in the bootstrap effect above. Always start this route at "password" and let the
+  // client decide — the self-service /onboarding/start entry point (no tokens involved) keeps the
+  // cookie-based branch below.
+  if (ctx.resolvedUrl.split("?")[0].startsWith("/onboarding/accept-invite")) {
+    return { props: { initialStep: "password" } };
+  }
+
   const session = await requireSession(ctx.req, ctx.res);
   if (!session) {
     // No cookie session yet — this is likely a fresh invite link whose

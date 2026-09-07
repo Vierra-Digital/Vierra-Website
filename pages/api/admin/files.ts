@@ -2,7 +2,9 @@ import { withSession } from "@/lib/api/withSession"
 import { prisma } from "@/lib/prisma"
 
 export default withSession(async (req, res, session) => {
-  const role = (session.user as { role?: string })?.role
+  // Client sessions never carry a `role` (see ResolvedIdentity's "client" variant) — default to
+  // "user" the same way pages/api/context/client.ts does, or every real client gets 403'd here.
+  const role = ((session.user as { role?: string })?.role || "user") as string
   if (role !== "admin" && role !== "staff" && role !== "user")
     return res.status(403).json({ message: "Forbidden" })
 
@@ -14,21 +16,21 @@ export default withSession(async (req, res, session) => {
     const NEVER_MATCH_USER_ID = "00000000-0000-0000-0000-000000000000"
 
     const where: Record<string, unknown> = {}
-    if (companyId) where.company_id = companyId
     if (role === "user") {
-      const client = await prisma.client.findUnique({
-        where: { user_id: uid ?? NEVER_MATCH_USER_ID },
-        select: { id: true },
-      })
-      if (client) {
-        where.client_id = client.id
-      } else {
-        where.client_id = "__none__"
+      // Every teammate on the same client company shares one Files list (see
+      // ClientTeamSection.tsx and context/client.ts's identical company-wide scope), not a
+      // separate copy per representative. session.companyId is this client's own company — a
+      // missing value means it could not be resolved, so deny rather than fall through to an
+      // unscoped query.
+      if (!companyId) return res.status(200).json([])
+      where.company_id = companyId
+    } else {
+      if (companyId) where.company_id = companyId
+      if (filter === "me" || !filter) {
+        where.user_id = uid ?? NEVER_MATCH_USER_ID
+      } else if (filter && typeof filter === "string") {
+        where.client_id = filter
       }
-    } else if (filter === "me" || !filter) {
-      where.user_id = uid ?? NEVER_MATCH_USER_ID
-    } else if (filter && typeof filter === "string") {
-      where.client_id = filter
     }
 
     const files = await prisma.storedFile.findMany({

@@ -145,6 +145,8 @@ export type ContactRow = {
   source: "MANUAL" | "GMAIL" | "CSV";
   accountEmail: string | null;
   tags: ContactTag[];
+  /** Only set when the list is Vierra staff's merged, all-clients view (see /api/contacts GET). */
+  company?: { id: string; name: string } | null;
 };
 
 export type ContactVisibility = {
