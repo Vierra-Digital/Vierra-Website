@@ -13,7 +13,7 @@ import {
   translateMergeTagsForSmartlead,
 } from "@/lib/campaigns/smartlead/client";
 import { brevoConfigured } from "@/lib/campaigns/brevo/client";
-import { notifyCampaignCompleted, notifyCampaignLaunched, discordConfigured } from "@/lib/notify/discord";
+import { notifyCampaignCompleted, notifyCampaignLaunched, notifyCampaignCancelled, discordConfigured } from "@/lib/notify/discord";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -203,9 +203,6 @@ export default withAuth(async (req, res) => {
         },
       });
 
-      // "cancelled" is intentionally excluded — cancellation isn't "done," it's abandoned, and a
-      // distinct notification for that wasn't asked for. See
-      // .claude/schema_v2_campaigns_discord_notifications.md §5/§7.
       if (nextStatus === "completed" && discordConfigured()) {
         const [sentCount, contactCount] = await Promise.all([
           prisma.emailOutboundMessage.count({ where: { campaign_id: id } }),
@@ -220,6 +217,11 @@ export default withAuth(async (req, res) => {
       if (nextStatus === "active" && existing.status === "draft" && discordConfigured()) {
         const contactCount = await prisma.campaignContact.count({ where: { campaign_id: id } });
         await notifyCampaignLaunched({ campaignId: id, campaignName: existing.name, contactCount });
+      }
+
+      if (nextStatus === "cancelled" && discordConfigured()) {
+        const contactCount = await prisma.campaignContact.count({ where: { campaign_id: id } });
+        await notifyCampaignCancelled({ campaignId: id, campaignName: existing.name, fromStatus: existing.status, contactCount });
       }
 
       res.status(200).json({ campaign: serializeCampaign(updated) });
