@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
-import { FiPlus, FiX, FiCheck, FiTrash2 } from "react-icons/fi";
+import { FiPlus, FiX, FiCheck, FiTrash2, FiAlertTriangle } from "react-icons/fi";
 import { Inter } from "next/font/google";
 import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
@@ -349,6 +349,7 @@ type EmailAccount = { id: string; accountEmail: string };
 type BrevoSender = { email: string; name: string; active: boolean };
 type EmailTemplate = { id: string; name: string; subject: string | null };
 type ContactTag = { id: string; name: string; color: string };
+type ContactOption = { id: string; firstName: string | null; lastName: string | null; email: string };
 type CampaignStep = {
   id: string;
   stepOrder: number;
@@ -395,7 +396,15 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   const [newStepDelayDays, setNewStepDelayDays] = useState(0);
 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  // Individually-picked contacts, additive with the tag filter above — see
+  // lib/campaigns/audienceSync.ts's AudienceFilter: a union, not a replacement, so someone can be
+  // included regardless of how (or whether) their tags happen to be set up.
+  const [selectedContacts, setSelectedContacts] = useState<ContactOption[]>([]);
+  const [contactQuery, setContactQuery] = useState("");
+  const [contactResults, setContactResults] = useState<ContactOption[]>([]);
+  const [contactSearchLoading, setContactSearchLoading] = useState(false);
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
+  const [preflightBlockers, setPreflightBlockers] = useState<string[]>([]);
 
   const canClose = useDraftGuard(Boolean(name || campaignId), "campaign wizard", "email", saving);
   const closeWizard = () => {
@@ -437,6 +446,32 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
       }
     })();
   }, []);
+
+  // Debounced contact search for the Audience step's "add specific contacts" picker — searching
+  // on every keystroke would otherwise fire a request per character.
+  useEffect(() => {
+    const q = contactQuery.trim();
+    // Nothing to search — the results dropdown already only renders when contactQuery is
+    // non-empty, so there's no stale-results case to clear here.
+    if (!q) return;
+    const handle = setTimeout(async () => {
+      setContactSearchLoading(true);
+      try {
+        const res = await fetch(`/api/contacts?search=${encodeURIComponent(q)}&limit=8`);
+        const data = await res.json();
+        if (res.ok) {
+          setContactResults(
+            (data.contacts || []).map((c: any) => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email }))
+          );
+        }
+      } catch {
+        /* search is best-effort; leave whatever results are already showing */
+      } finally {
+        setContactSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [contactQuery]);
 
   // Draft creation (step 0), sequence steps (step 1), audience enrollment (step 2), and launch
   // (step 3's button) are all real API calls now — a mock campaign/account/template still short-
@@ -497,20 +532,29 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
         if (!campaignId) return;
         if (isMockCampaignId(campaignId)) {
           setEnrolledCount(0);
+          setPreflightBlockers([]);
           setWizardStep(3);
           return;
         }
-        const patchRes = await fetch(`/api/campaigns/${campaignId}`, {
-          method: "PATCH",
+        // One call, not "PATCH audienceFilter then POST /sync" — those were two separate
+        // round-trips for what pages/api/campaigns/[id]/audience.ts already does atomically, so a
+        // network failure between them used to leave the filter saved but nothing enrolled, with
+        // no visible sign of that when the draft was reopened later.
+        const audienceRes = await fetch(`/api/campaigns/${campaignId}/audience`, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audienceFilter: { tagIds: selectedTagIds } }),
+          body: JSON.stringify({ tagIds: selectedTagIds, contactIds: selectedContacts.map((c) => c.id) }),
         });
-        if (!patchRes.ok) throw new Error((await patchRes.json().catch(() => ({}))).message || "Failed to save audience filter");
+        const audienceData = await audienceRes.json().catch(() => ({}));
+        if (!audienceRes.ok) throw new Error(audienceData.message || "Failed to enroll audience");
+        setEnrolledCount(audienceData.enrolledCount ?? 0);
 
-        const syncRes = await fetch(`/api/campaigns/${campaignId}/sync`, { method: "POST" });
-        const syncData = await syncRes.json();
-        if (!syncRes.ok) throw new Error(syncData.message || "Failed to enroll audience");
-        setEnrolledCount(syncData.enrolledCount ?? 0);
+        // Surface the same launch blockers (missing mailing address, zero audience, etc.) the
+        // campaign detail view already shows, instead of only finding out after clicking Launch.
+        const campaignRes = await fetch(`/api/campaigns/${campaignId}`);
+        const campaignData = await campaignRes.json().catch(() => ({}));
+        setPreflightBlockers(campaignRes.ok ? campaignData.preflight?.blockers ?? [] : []);
+
         setWizardStep(3);
         return;
       }
@@ -806,27 +850,90 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
       {wizardStep === 2 && (
         <div className="space-y-4">
           <p className="text-sm text-[#374151]">
-            Leave everything unchecked to enroll every contact across the company. Check tags to narrow the audience
-            (only your own tags are shown).
+            Leave everything below empty to enroll every contact across the company. Check tags and/or add specific
+            contacts to narrow the audience — either one includes a contact, so the two combine rather than both
+            being required.
           </p>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {tags.map((tag) => (
-              <label key={tag.id} className="flex items-center gap-2 text-sm text-[#111827]">
-                <input
-                  type="checkbox"
-                  aria-label={tag.name}
-                  checked={selectedTagIds.includes(tag.id)}
-                  onChange={(e) =>
-                    setSelectedTagIds((prev) => (e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)))
-                  }
-                />
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
-                  {tag.name}
-                </span>
-              </label>
-            ))}
-            {tags.length === 0 && <p className="text-xs text-[#9CA3AF]">You have no contact tags yet.</p>}
+          <div>
+            <p className="text-sm font-medium text-[#374151] mb-2">Tags (only your own are shown)</p>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {tags.map((tag) => (
+                <label key={tag.id} className="flex items-center gap-2 text-sm text-[#111827]">
+                  <input
+                    type="checkbox"
+                    aria-label={tag.name}
+                    checked={selectedTagIds.includes(tag.id)}
+                    onChange={(e) =>
+                      setSelectedTagIds((prev) => (e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)))
+                    }
+                  />
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }} />
+                    {tag.name}
+                  </span>
+                </label>
+              ))}
+              {tags.length === 0 && <p className="text-xs text-[#9CA3AF]">You have no contact tags yet.</p>}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium text-[#374151] mb-2">Specific contacts</p>
+            <input
+              type="text"
+              value={contactQuery}
+              onChange={(e) => setContactQuery(e.target.value)}
+              placeholder="Search by name or email…"
+              className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+            />
+            {contactQuery.trim() && (
+              <div className="mt-2 max-h-40 overflow-y-auto border border-[#E5E7EB] rounded-lg divide-y divide-[#F3F4F6]">
+                {contactSearchLoading ? (
+                  <p className="px-3 py-2 text-xs text-[#9CA3AF]">Searching…</p>
+                ) : contactResults.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-[#9CA3AF]">No matching contacts.</p>
+                ) : (
+                  contactResults.map((c) => {
+                    const alreadyPicked = selectedContacts.some((s) => s.id === c.id);
+                    const label = [c.firstName, c.lastName].filter(Boolean).join(" ") || c.email;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        disabled={alreadyPicked}
+                        onClick={() => {
+                          setSelectedContacts((prev) => [...prev, c]);
+                          setContactQuery("");
+                        }}
+                        className="w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+                      >
+                        <span className="text-[#111827]">{label}</span>
+                        <span className="text-xs text-[#9CA3AF]">{alreadyPicked ? "Added" : c.email}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+            {selectedContacts.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedContacts.map((c) => (
+                  <span
+                    key={c.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#F5EEFC] text-[#701CC0] text-xs px-2 py-1"
+                  >
+                    {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.email}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${c.email}`}
+                      onClick={() => setSelectedContacts((prev) => prev.filter((x) => x.id !== c.id))}
+                    >
+                      <FiX className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -835,16 +942,35 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
         <div className="space-y-4">
           <div className="flex flex-col items-center text-center py-4">
             <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-              <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                  <FiCheck className="h-6 w-6" />
+              {preflightBlockers.length > 0 ? (
+                <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 text-white">
+                    <FiAlertTriangle className="h-6 w-6" />
+                  </span>
                 </span>
-              </span>
+              ) : (
+                <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                    <FiCheck className="h-6 w-6" />
+                  </span>
+                </span>
+              )}
             </div>
-            <h4 className="text-lg font-semibold text-[#111827] mb-1">Ready to launch</h4>
+            <h4 className="text-lg font-semibold text-[#111827] mb-1">
+              {preflightBlockers.length > 0 ? "Not ready to launch yet" : "Ready to launch"}
+            </h4>
             <p className="text-sm text-[#6B7280]">
               {steps.length} step{steps.length === 1 ? "" : "s"} · {enrolledCount ?? 0} contact{enrolledCount === 1 ? "" : "s"} enrolled
             </p>
+            {preflightBlockers.length > 0 && (
+              <div className="mt-3 w-full rounded-lg border border-amber-200 bg-amber-50 p-3 text-left">
+                {preflightBlockers.map((blocker) => (
+                  <p key={blocker} className="text-sm text-amber-800">
+                    {blocker}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
