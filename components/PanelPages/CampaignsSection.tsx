@@ -463,8 +463,14 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   useEffect(() => {
     (async () => {
       try {
+        // scopeToCompany: a mailbox's company_id is fixed at connection time, and picking one
+        // that belongs to a different company than this draft (resolved the same way the create
+        // call below resolves it, via panelFetch's active-client injection) fails validation on
+        // submit with a confusing "must reference one of your connected mailboxes" — so this
+        // filters to only the mailboxes that will actually work, instead of listing every mailbox
+        // across every client and letting most of them silently be wrong picks.
         const [accountsRes, templatesRes, tagsRes] = await Promise.all([
-          fetch("/api/email/accounts"),
+          panelFetch("/api/email/accounts?scopeToCompany=1"),
           fetch("/api/gmail/templates"),
           fetch("/api/contacts/tags"),
         ]);
