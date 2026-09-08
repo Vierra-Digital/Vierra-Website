@@ -10,6 +10,7 @@ import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
 import {
     PanelBadge,
+    PanelBulkBar,
     PanelButton,
     PanelClearFilters,
     PanelDataTable,
@@ -127,6 +128,10 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
+    const [bulkDeleting, setBulkDeleting] = useState(false)
+    const [bulkDeleteError, setBulkDeleteError] = useState("")
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -216,6 +221,78 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             console.error("Error rescinding invite:", error)
             alert("Failed to rescind invite. Please try again.")
         }
+    }
+
+    const toggleRowSelection = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    const togglePageSelection = (keys: string[], nextChecked: boolean) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            for (const key of keys) {
+                if (nextChecked) next.add(key)
+                else next.delete(key)
+            }
+            return next
+        })
+    }
+
+    const clearSelection = () => setSelectedIds(new Set())
+
+    /**
+     * A row can't be bulk-removed if it's the signed-in admin's own account — the API refuses
+     * that anyway, but surfacing it as "not even checkable" is clearer than a per-row failure
+     * buried in the bulk error summary.
+     */
+    const isRowSelectable = (id: string) => {
+        const row = rows.find(r => r.id === id)
+        return Boolean(row) && !row?.isSelf
+    }
+
+    const handleBulkRemove = async () => {
+        if (activeSelectedIds.size === 0 || bulkDeleting) return
+        setBulkDeleting(true)
+        setBulkDeleteError("")
+        const targets = rows.filter(r => activeSelectedIds.has(r.id))
+        // Sequential: staff removal and invite rescission both hit admin routes (staff removal
+        // also calls out to Supabase Auth), and a bulk removal here is rare enough that one at a
+        // time is safer than a burst of concurrent admin calls.
+        const failedIds = new Set<string>()
+        const failedLabels: string[] = []
+        for (const target of targets) {
+            try {
+                const response = target.isPending
+                    ? await fetch(`/api/admin/invitations/${target.id}`, { method: "DELETE" })
+                    : await fetch(`/api/admin/users`, {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: target.id }),
+                      })
+                if (!response.ok) throw new Error("failed")
+            } catch {
+                failedIds.add(target.id)
+                failedLabels.push(target.name || target.email)
+            }
+        }
+        const removedIds = new Set(targets.filter(t => !failedIds.has(t.id)).map(t => t.id))
+        setRows(prev => prev.filter(r => !removedIds.has(r.id)))
+        setSelectedIds(new Set())
+        if (failedIds.size > 0) {
+            setBulkDeleteError(
+                failedIds.size === targets.length
+                    ? "Could not remove any of the selected rows. Close this dialog and try again."
+                    : `Removed ${targets.length - failedIds.size} of ${targets.length}. Failed: ${failedLabels.join(", ")}.`
+            )
+        } else {
+            setBulkDeleteModalOpen(false)
+        }
+        setBulkDeleting(false)
     }
 
     const handleUpdateStaff = async (updatedData: Partial<TeamRow>) => {
@@ -392,6 +469,14 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         loadTeamData()
     }, [loadTeamData])
 
+    // Derived, not synced via an effect: a refetch or a single-row delete can drop ids that are
+    // still in selectedIds, and re-deriving here (rather than pruning selectedIds itself in an
+    // effect) keeps the bulk bar's count from ever including a row that's already gone.
+    const activeSelectedIds = new Set<string>()
+    for (const row of rows) {
+        if (selectedIds.has(row.id)) activeSelectedIds.add(row.id)
+    }
+
     const positionTone = (position: string) => {
         switch (position) {
             case "Founder":
@@ -496,6 +581,17 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 )}
             </PanelHeader>
 
+            {userRole === "admin" && (
+                <PanelBulkBar count={activeSelectedIds.size} onClear={clearSelection} label={(n) => `${n} selected`}>
+                    <PanelButton
+                        onClick={() => { setBulkDeleteError(""); setBulkDeleteModalOpen(true) }}
+                        icon={<FiTrash2 className="h-4 w-4" />}
+                    >
+                        Remove
+                    </PanelButton>
+                </PanelBulkBar>
+            )}
+
             <PanelDataTable<TeamRow>
                 rows={filteredRows}
                 getRowKey={(r) => r.id}
@@ -507,6 +603,16 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 emptyTitle="No Staff Found"
                 emptyMessage="No staff match your search."
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
+                selection={
+                    userRole === "admin"
+                        ? {
+                              selectedKeys: activeSelectedIds,
+                              onToggleRow: toggleRowSelection,
+                              onTogglePage: togglePageSelection,
+                              isRowSelectable,
+                          }
+                        : undefined
+                }
                 columns={[
                     {
                         key: "name",
@@ -651,6 +757,36 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         setInviteToRescind(null)
                     }}
                     onConfirm={confirmRescindInvite}
+                />
+            )}
+
+            {userRole === "admin" && (
+                <ConfirmActionModal
+                    isOpen={bulkDeleteModalOpen}
+                    title="Remove Selected"
+                    message={
+                        <>
+                            Are you sure you want to remove{" "}
+                            <span className="font-semibold text-[#111827]">
+                                {activeSelectedIds.size} row{activeSelectedIds.size === 1 ? "" : "s"}
+                            </span>
+                            ? Staff removal is permanent and cannot be undone; pending invites are rescinded.
+                            {bulkDeleteError && (
+                                <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                    {bulkDeleteError}
+                                </span>
+                            )}
+                        </>
+                    }
+                    confirmLabel="Remove Selected"
+                    busy={bulkDeleting}
+                    busyLabel="Removing…"
+                    onCancel={() => {
+                        if (bulkDeleting) return
+                        setBulkDeleteModalOpen(false)
+                        setBulkDeleteError("")
+                    }}
+                    onConfirm={handleBulkRemove}
                 />
             )}
         </PanelPage>

@@ -4,6 +4,7 @@ import ProfileImage from "../ProfileImage"
 import { FiPlus, FiFilter, FiChevronDown, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import {
+    PanelBulkBar,
     PanelButton,
     PanelClearFilters,
     PanelDataTable,
@@ -138,6 +139,10 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
     const [retainerSort, setRetainerSort] = useState<'none' | 'asc' | 'desc'>("none")
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
+    const [bulkDeleting, setBulkDeleting] = useState(false)
+    const [bulkDeleteError, setBulkDeleteError] = useState("")
     const hydratingView = useRef(false)
     const pageSize = 10
     useEffect(() => {
@@ -192,6 +197,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         fetchClients()
     }, [])
 
+
     useEffect(() => {
         if (refreshTrigger && refreshTrigger > 0) {
             // Re-fetches when the parent bumps refreshTrigger after adding or editing a client.
@@ -233,6 +239,68 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         setDeleteError("")
         setClientToDelete(client)
         setDeleteModalOpen(true)
+    }
+
+    const toggleRowSelection = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    const togglePageSelection = (keys: string[], nextChecked: boolean) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            for (const key of keys) {
+                if (nextChecked) next.add(key)
+                else next.delete(key)
+            }
+            return next
+        })
+    }
+
+    const clearSelection = () => setSelectedIds(new Set())
+
+    const handleBulkDeleteClients = async () => {
+        if (activeSelectedIds.size === 0 || mutationPending.current || fetchPending.current) return
+        mutationPending.current = true
+        setBulkDeleting(true)
+        setBulkDeleteError("")
+        setNotice("")
+        const targets = rows.filter(client => activeSelectedIds.has(client.id))
+        // Sequential, not Promise.all: this hits the same admin delete route per client (each of
+        // which also calls out to Supabase Auth), and a bulk removal is rare enough that there's no
+        // reason to fire a burst of concurrent admin-auth calls when one at a time is safer.
+        const failedIds = new Set<string>()
+        const failedNames: string[] = []
+        for (const client of targets) {
+            try {
+                const r = await fetch(`/api/admin/deleteClient?clientId=${client.id}`, { method: "DELETE" })
+                if (!r.ok) throw new Error("failed")
+                const result = await r.json()
+                if (result?.clientId !== client.id) throw new Error("failed")
+            } catch {
+                failedIds.add(client.id)
+                failedNames.push(client.name || client.id)
+            }
+        }
+        const removedIds = new Set(targets.filter(c => !failedIds.has(c.id)).map(c => c.id))
+        setRows(prev => prev.filter(client => !removedIds.has(client.id)))
+        setSelectedIds(new Set())
+        if (failedIds.size > 0) {
+            setBulkDeleteError(
+                failedIds.size === targets.length
+                    ? "Could not remove any of the selected clients. Close this dialog and try again."
+                    : `Removed ${targets.length - failedIds.size} of ${targets.length}. Failed: ${failedNames.join(", ")}.`
+            )
+        } else {
+            setNotice(`Removed ${targets.length} client${targets.length === 1 ? "" : "s"}.`)
+            setBulkDeleteModalOpen(false)
+        }
+        mutationPending.current = false
+        setBulkDeleting(false)
     }
 
     const handleToggleStatus = async (clientId: string, newStatus: boolean) => {
@@ -313,6 +381,14 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         }
         return sorted
     }, [rows, searchQuery, statusFilter, nameSort, retainerSort])
+
+    // Derived, not synced via an effect: a refetch or a single-row delete can drop ids that are
+    // still in selectedIds, and re-deriving here (rather than pruning selectedIds itself in an
+    // effect) keeps the bulk bar's count from ever including a row that's already gone.
+    const activeSelectedIds = new Set<string>()
+    for (const row of rows) {
+        if (selectedIds.has(row.id)) activeSelectedIds.add(row.id)
+    }
 
     // Page index clamped rather than reset from an effect. Searching to a shorter list could leave
     // currentPage past the end, and slicing beyond the array renders an empty table with nothing to
@@ -412,6 +488,17 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                 </PanelButton>
             </PanelHeader>
 
+            {isAdmin && (
+                <PanelBulkBar count={activeSelectedIds.size} onClear={clearSelection} label={(n) => `${n} client${n === 1 ? "" : "s"} selected`}>
+                    <PanelButton
+                        onClick={() => { setBulkDeleteError(""); setBulkDeleteModalOpen(true) }}
+                        icon={<FiTrash2 className="h-4 w-4" />}
+                    >
+                        Remove
+                    </PanelButton>
+                </PanelBulkBar>
+            )}
+
             <PanelDataTable<ClientRow>
                 rows={filteredRows}
                 getRowKey={(r) => r.id}
@@ -433,6 +520,15 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                             Add Client
                         </PanelButton>
                     )
+                }
+                selection={
+                    isAdmin
+                        ? {
+                              selectedKeys: activeSelectedIds,
+                              onToggleRow: toggleRowSelection,
+                              onTogglePage: togglePageSelection,
+                          }
+                        : undefined
                 }
                 columns={[
                     {
@@ -540,6 +636,30 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
             if (mutationPending.current) return
             setDeleteModalOpen(false)
             setClientToDelete(null)
+          }}
+        />
+
+        <ConfirmActionModal
+          isOpen={bulkDeleteModalOpen}
+          title="Remove Clients"
+          message={
+            <>
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-[#111827]">
+                {activeSelectedIds.size} client{activeSelectedIds.size === 1 ? "" : "s"}
+              </span>
+              ? This action is permanent and cannot be undone.
+            </>
+          }
+          confirmLabel="Remove Clients"
+          busy={bulkDeleting}
+          busyLabel="Removing…"
+          error={bulkDeleteError}
+          onConfirm={handleBulkDeleteClients}
+          onCancel={() => {
+            if (mutationPending.current) return
+            setBulkDeleteModalOpen(false)
+            setBulkDeleteError("")
           }}
         />
         </>

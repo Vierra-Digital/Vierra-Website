@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { serializeContact } from "@/lib/api/contacts";
-import { asStr } from "@/lib/api/parsing";
+import { asStr, isUuid } from "@/lib/api/parsing";
 import { normalizePhone } from "@/lib/contacts/phone";
 
 function getId(req: NextApiRequest) {
@@ -16,6 +16,14 @@ export default withAuth(async (req, res, session) => {
   const id = getId(req);
   if (!id) {
     res.status(400).json({ message: "Contact id is required." });
+    return;
+  }
+  // contacts.id is a @db.Uuid column — a non-UUID id would make Prisma throw (P2007) instead of
+  // returning "not found," landing in the catch below as a 500. Answering 404 here for both "not
+  // shaped like an id" and "shaped like an id but doesn't exist" keeps the two indistinguishable
+  // from the caller's side, which is also the more honest answer for a resource that isn't theirs.
+  if (!isUuid(id)) {
+    res.status(404).json({ message: "Contact not found." });
     return;
   }
 

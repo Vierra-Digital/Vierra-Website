@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/api/withAuth"
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany"
+import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany"
 
 type GrowthDirection = "up" | "flat" | "down"
 
@@ -52,17 +52,22 @@ export default withAuth(async (req, res, session) => {
     /**
      * A staff member who has not picked a client yet sees the whole company, not an error.
      *
-     * resolveTargetCompanyId returns null for a member session with no client selected, and this
-     * used to answer 400 — which meant the dashboard was entirely dead on load (every tile zero,
-     * every panel empty) until someone happened to choose a client in Clients. Role model v2 lets
-     * any Vierra staff member target any client, so the honest reading of "no target" is "all of
-     * them" rather than "refuse". Picking a client narrows it, exactly as before.
+     * resolveTargetCompanyId always resolves to *some* companyId now — Vierra's own, as a
+     * fallback for staff using tools like Cartography/Contacts on Vierra's own behalf (see
+     * lib/api/targetCompany.ts) — so it can no longer be used here to detect "no client chosen".
+     * hasExplicitTargetCompanyId answers that instead: unset means "all of them" (merged view),
+     * exactly as before role model v2 introduced the Vierra fallback. Picking a client narrows it.
      *
-     * A client session always resolves to its own company, so it can never reach the wider view.
+     * A client session always counts as explicit, so it can never reach the wider view.
      */
+    const merged = session.kind === "member" && !hasExplicitTargetCompanyId(session, req)
     const companyId = resolveTargetCompanyId(session, req)
-    const scope = companyId ? { company_id: companyId } : {}
-    const campaignScope = companyId ? { campaigns: { company_id: companyId } } : {}
+    if (!merged && !companyId) {
+      res.status(400).json({ message: "companyId is required" })
+      return
+    }
+    const scope = merged ? {} : { company_id: companyId! }
+    const campaignScope = merged ? {} : { campaigns: { company_id: companyId! } }
     const now = new Date()
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)

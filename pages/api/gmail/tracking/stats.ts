@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 import { asQueryStr } from "@/lib/api/parsing";
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 
 /** Rows returned for the display tables. Totals are aggregated separately, over ALL matches. */
 const TABLE_ROW_LIMIT = 200;
@@ -13,10 +13,13 @@ const ANALYSIS_SAMPLE_LIMIT = 2000;
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   // Campaigns are client-scoped (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — the
-  // deliverability numbers below need an explicit target client, not session.companyId (which is
-  // Vierra's own fixed company for every staff session now).
+  // deliverability numbers below need to know the caller's *real* target, not session.companyId
+  // (which is Vierra's own fixed company for every staff session now, via resolveTargetCompanyId's
+  // fallback). A staff member with no client picked sees every client's campaigns merged together,
+  // exactly like the Dashboard and Contacts do — not an error, and not Vierra's own (empty) company.
+  const merged = !hasExplicitTargetCompanyId(session, req);
   const companyId = resolveTargetCompanyId(session, req);
-  if (!companyId) {
+  if (!merged && !companyId) {
     res.status(400).json({ message: "companyId is required" });
     return;
   }
@@ -66,6 +69,10 @@ export default withAuth(async (req, res, session) => {
     user_id: userId,
     ...(accountIds.length > 0 ? { account_id: { in: accountIds } } : {}),
     ...createdAtFilter,
+    // A specific client is selected: only mail sent through that client's campaigns is "theirs" —
+    // ad hoc/manual sends carry no campaign_id and can't be attributed to any one client, so they
+    // drop out of a per-client view (they still count in the merged "all clients" view below).
+    ...(merged ? {} : { campaigns: { company_id: companyId! } }),
   };
   const trackedWhere: Prisma.EmailOutboundMessageWhereInput = { ...where, tracking_enabled: true };
   const eventWhere = (eventType: string): Prisma.EmailTrackingEventWhereInput => ({
@@ -119,7 +126,7 @@ export default withAuth(async (req, res, session) => {
   // daily rollup carries provider-reported bounces/unsubscribes/replies (written by the Brevo
   // webhook). Scoped to the caller's company campaigns.
   const campaignSendWhere: Prisma.CampaignStepSendWhereInput = {
-    campaign_contacts: { campaigns: { company_id: companyId } },
+    campaign_contacts: { campaigns: merged ? {} : { company_id: companyId! } },
     ...(from || to
       ? { created_at: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } }
       : {}),
@@ -136,7 +143,7 @@ export default withAuth(async (req, res, session) => {
     }),
     prisma.campaignDailyStat.aggregate({
       where: {
-        campaigns: { company_id: companyId },
+        campaigns: merged ? {} : { company_id: companyId! },
         ...(from ? { date: { gte: new Date(from) } } : {}),
       },
       _sum: { bounces: true, unsubscribes: true, replies: true },

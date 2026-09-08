@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isUuid } from "@/lib/api/parsing";
 
 const ARTEMIS_PROSPECT_URL = (process.env.ARTEMIS_PROSPECT_URL || "").replace(/\/+$/, "");
 const ARTEMIS_PROSPECT_KEY = process.env.ARTEMIS_PROSPECT_KEY || "";
@@ -32,6 +33,17 @@ export type StartProspectJobResult =
 export async function startProspectJob(params: StartProspectJobParams): Promise<StartProspectJobResult> {
   if (!ARTEMIS_PROSPECT_URL || !ARTEMIS_PROSPECT_KEY || !PUBLIC_BASE_URL) {
     return { ok: false, status: 503, message: "Artemis prospect is not configured." };
+  }
+
+  // clients.id / companies.id are @db.Uuid columns — the findUnique calls below would otherwise
+  // throw (P2007) on a malformed id rather than the clean 404 this function means to answer for
+  // any id that isn't a real row's, breaking the "never throws" contract this function documents.
+  // clientId can come straight from request bodies this function doesn't control (see
+  // pages/api/prospect/start.ts's member-session path), so it isn't already guaranteed shaped the
+  // way Cartography's companyId is (see lib/api/targetCompany.ts).
+  if (params.clientId && !isUuid(params.clientId)) return { ok: false, status: 404, message: "Client not found." };
+  if (!params.clientId && params.companyId && !isUuid(params.companyId)) {
+    return { ok: false, status: 404, message: "Company not found." };
   }
 
   let companyId: string;
@@ -109,7 +121,13 @@ export async function startProspectJob(params: StartProspectJobParams): Promise<
     return { ok: false, status: artemisRes.status === 429 ? 429 : 502, message: "Artemis rejected the prospect request." };
   }
 
-  const { job_id: jobId } = (await artemisRes.json()) as { job_id?: string };
+  let jobId: string | undefined;
+  try {
+    ({ job_id: jobId } = (await artemisRes.json()) as { job_id?: string });
+  } catch (error) {
+    console.error("startProspectJob: Artemis returned a malformed response body", error);
+    return { ok: false, status: 502, message: "Artemis returned a malformed response." };
+  }
   if (!jobId) return { ok: false, status: 502, message: "Artemis did not return a job id." };
 
   await prisma.artemisProspectJob.create({

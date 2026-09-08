@@ -187,14 +187,43 @@ const ReviewQueue: React.FC = () => {
   }
 
   const results = rows || [];
+  const allSelected = results.length > 0 && results.every((r) => selected.has(r.id));
+  const toggleAllSelected = () => {
+    setSelected(allSelected ? new Set() : new Set(results.map((r) => r.id)));
+  };
 
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-wide text-[#6B7280]">
-          {results.length} awaiting review{selected.size > 0 ? ` · ${selected.size} selected` : ""}
-        </p>
+        <div className="flex items-center gap-3">
+          {results.length > 0 ? (
+            <label className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6B7280]">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleAllSelected}
+                disabled={promoting}
+                className="h-4 w-4 accent-[#701CC0]"
+                aria-label={allSelected ? "Deselect all" : "Select all"}
+              />
+              {allSelected ? "Deselect all" : "Select all"}
+            </label>
+          ) : null}
+          <p className="text-xs font-medium uppercase tracking-wide text-[#6B7280]">
+            {results.length} awaiting review{selected.size > 0 ? ` · ${selected.size} selected` : ""}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
+          {selected.size > 0 ? (
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              disabled={promoting}
+              className="text-xs text-[#6B7280] hover:text-[#374151]"
+            >
+              Clear
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={load}
@@ -209,7 +238,7 @@ const ReviewQueue: React.FC = () => {
             disabled={selected.size === 0 || promoting}
             className="inline-flex items-center gap-2 rounded-md bg-[#701CC0] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {promoting ? "Promoting…" : `Import ${selected.size || ""} to Contacts`}
+            {promoting ? "Promoting…" : selected.size > 0 ? `Import ${selected.size} to Contacts` : "Import to Contacts"}
           </button>
         </div>
       </div>

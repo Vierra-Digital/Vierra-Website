@@ -10,7 +10,7 @@ export type ModuleKey =
   | "allmail"
   | "analytics"
   | "campaigns"
-  | "cryptography"
+  | "cartography"
   | "contacts"
   | "archive"
   | "spam"
