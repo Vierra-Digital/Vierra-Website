@@ -806,6 +806,45 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     await loadAccountData(activeAccountEmail);
   };
 
+  // The only way to fix a rejected/expired SMTP password used to be Remove + re-add — which
+  // creates a new row with a new id, orphaning anything that already referenced the old one (a
+  // campaign's account_id, most notably). PUT /api/email/accounts already supports updating an
+  // existing row in place; this was just never wired to anything in the UI.
+  const editProviderAccount = (account: { id: string; accountEmail: string; smtpUsername: string | null }) => {
+    setPromptConfig({
+      title: `Update credentials — ${account.accountEmail}`,
+      description: "Leave the password blank to keep the current one (only the username needs changing, rarely).",
+      fields: [
+        { name: "smtpUsername", label: "SMTP username", defaultValue: account.smtpUsername || "" },
+        { name: "smtpPassword", label: "New SMTP password", type: "password", placeholder: "Leave blank to keep current" },
+      ],
+      confirmLabel: "Save credentials",
+      onSubmit: async ({ smtpUsername, smtpPassword }) => {
+        try {
+          const response = await fetch("/api/email/accounts", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: account.id,
+              ...(smtpUsername ? { smtpUsername } : {}),
+              ...(smtpPassword ? { smtpPassword } : {}),
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload?.message || "Failed to update credentials");
+          setStatus("Mailbox credentials updated.");
+          await loadAccountData(activeAccountEmail);
+        } catch (error) {
+          // Surfaced via the status bar (the modal's own onSubmit wrapper has no error path of
+          // its own — see the other promptConfig.onSubmit handlers in this file), and re-thrown
+          // so the modal stays open rather than closing as if the save had actually succeeded.
+          setStatus(error instanceof Error ? error.message : "Failed to update credentials");
+          throw error;
+        }
+      },
+    });
+  };
+
   const testProviderAccount = async (id: string) => {
     setTestingProviderId(id);
     try {
@@ -3366,6 +3405,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
+                          <button type="button" onClick={() => editProviderAccount(account)} className={btnSecondary}>
+                            Edit
+                          </button>
                           <button type="button" onClick={() => testProviderAccount(account.id)} className={btnSecondary}>
                             {testingProviderId === account.id ? "Testing…" : "Test"}
                           </button>

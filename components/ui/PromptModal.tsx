@@ -12,7 +12,7 @@ import Modal from "@/components/ui/Modal";
 export type PromptField = {
   name: string;
   label?: string;
-  type?: "text" | "textarea" | "color";
+  type?: "text" | "password" | "textarea" | "color";
   placeholder?: string;
   defaultValue?: string;
   required?: boolean;
@@ -136,7 +136,8 @@ const PromptModal: React.FC<PromptModalProps> = ({
               ) : (
                 <input
                   ref={index === 0 ? (el) => { firstFieldRef.current = el; } : undefined}
-                  type="text"
+                  type={field.type === "password" ? "password" : "text"}
+                  autoComplete={field.type === "password" ? "new-password" : undefined}
                   value={values[field.name] ?? ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
                   onKeyDown={(e) => {
