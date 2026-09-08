@@ -1,6 +1,6 @@
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
-import { asQueryStr } from "@/lib/api/parsing";
+import { asQueryStr, isUuid } from "@/lib/api/parsing";
 
 /** The query params both the contacts list and the CSV export filter on. */
 export type ContactsQuery = {
@@ -31,10 +31,12 @@ export async function buildContactsWhere(
   const accountEmail = asQueryStr(query.accountEmail).toLowerCase();
   const search = asQueryStr(query.search);
   const source = asQueryStr(query.source).toLowerCase();
+  // contact_tags.id is a @db.Uuid column — a malformed entry in this comma-separated list would
+  // otherwise make the `{ in: tagIds }` filter below throw (P2007) instead of just not matching.
   const tagIds = asQueryStr(query.tagIds)
     .split(",")
     .map((entry) => entry.trim())
-    .filter(Boolean);
+    .filter(isUuid);
 
   // Scoped by company, not by the caller: a contact belongs to the client it was gathered for,
   // and every teammate working that client needs to see it. userId is still needed below to

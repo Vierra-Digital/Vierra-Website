@@ -71,9 +71,12 @@ describe("buildContactsWhere", () => {
     expect(where.account_id).toBe("acct-9");
   });
 
+  const TAG_1 = "11111111-1111-4111-8111-111111111111";
+  const TAG_2 = "22222222-2222-4222-8222-222222222222";
+
   it("splits tag ids on commas and drops the empties", async () => {
-    const where = await buildContactsWhere(USER, COMPANY, { tagIds: "a, b ,,c," });
-    expect(where.contact_tag_assignments).toEqual({ some: { tag_id: { in: ["a", "b", "c"] } } });
+    const where = await buildContactsWhere(USER, COMPANY, { tagIds: `${TAG_1}, ${TAG_2} ,,` });
+    expect(where.contact_tag_assignments).toEqual({ some: { tag_id: { in: [TAG_1, TAG_2] } } });
   });
 
   it("omits the tag filter entirely when no ids survive", async () => {
@@ -82,13 +85,20 @@ describe("buildContactsWhere", () => {
     }
   });
 
+  it("drops malformed tag ids instead of letting them reach Prisma", async () => {
+    // contact_tags.id is a @db.Uuid column — an id shaped like anything else would make the
+    // `{ in: tagIds }` filter throw (P2007) instead of just not matching.
+    const where = await buildContactsWhere(USER, COMPANY, { tagIds: `not-a-uuid,${TAG_1},'; drop table contacts;--` });
+    expect(where.contact_tag_assignments).toEqual({ some: { tag_id: { in: [TAG_1] } } });
+  });
+
   it("combines every filter at once", async () => {
     resolveAccountId.mockResolvedValue("acct-1");
     const where = await buildContactsWhere(USER, COMPANY, {
       accountEmail: "a@b.co",
       search: "acme",
       source: "csv",
-      tagIds: "t1,t2",
+      tagIds: `${TAG_1},${TAG_2}`,
     });
     expect(where.company_id).toBe(COMPANY);
     expect(where.account_id).toBe("acct-1");

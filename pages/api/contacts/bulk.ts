@@ -1,12 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { handleApiError } from "@/lib/api/guards";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
-import { asStr } from "@/lib/api/parsing";
+import { asStr, isUuid } from "@/lib/api/parsing";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
+/** contacts.id is a @db.Uuid column — a malformed entry would otherwise make the `{ in: ids }`
+ *  lookup below throw (P2007) instead of just not matching, like any other id that isn't real. */
 function asIdArray(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
-  return [...new Set(v.map((entry) => asStr(entry)).filter(Boolean))];
+  return [...new Set(v.map((entry) => asStr(entry)).filter(isUuid))];
 }
 
 export default withAuth(async (req, res, session) => {
@@ -44,8 +47,8 @@ export default withAuth(async (req, res, session) => {
 
     if (req.method === "POST") {
       const tagId = asStr(req.body?.tagId);
-      if (!tagId) {
-        res.status(400).json({ message: "tagId is required" });
+      if (!tagId || !isUuid(tagId)) {
+        res.status(400).json({ message: "A valid tagId is required" });
         return;
       }
       const tag = await prisma.contactTag.findFirst({ where: { id: tagId, user_id: userId } });
@@ -61,7 +64,6 @@ export default withAuth(async (req, res, session) => {
       return;
     }
   } catch (e) {
-    console.error("contacts/bulk", req.method, e);
-    res.status(500).json({ message: "Failed to process bulk contact request." });
+    handleApiError(res, `contacts/bulk ${req.method}`, e, "Failed to process bulk contact request.");
   }
 }, { methods: ["DELETE", "POST"] });

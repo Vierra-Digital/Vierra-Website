@@ -1,6 +1,7 @@
 import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { handleApiError } from "@/lib/api/guards";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { serializeContact } from "@/lib/api/contacts";
 import { asStr, isUuid } from "@/lib/api/parsing";
@@ -87,7 +88,6 @@ export default withAuth(async (req, res, session) => {
       return;
     }
   } catch (e) {
-    console.error("contacts/[id]", req.method, e);
-    res.status(500).json({ message: "Failed to process contact request." });
+    handleApiError(res, `contacts/[id] ${req.method}`, e, "Failed to process contact request.");
   }
 }, { methods: ["GET", "PUT", "PATCH", "DELETE"] });

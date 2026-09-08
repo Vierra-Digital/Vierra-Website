@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { isUuid } from "@/lib/api/parsing";
+import { mapPrismaError } from "@/lib/api/prismaError";
 
 const ARTEMIS_PROSPECT_URL = (process.env.ARTEMIS_PROSPECT_URL || "").replace(/\/+$/, "");
 const ARTEMIS_PROSPECT_KEY = process.env.ARTEMIS_PROSPECT_KEY || "";
@@ -130,16 +131,26 @@ export async function startProspectJob(params: StartProspectJobParams): Promise<
   }
   if (!jobId) return { ok: false, status: 502, message: "Artemis did not return a job id." };
 
-  await prisma.artemisProspectJob.create({
-    data: {
-      id: jobId,
-      client_id: params.clientId ?? null,
-      company_id: companyId,
-      requested_by: params.requestedBy,
-      goal: params.goal,
-      status: "queued",
-    },
-  });
+  try {
+    await prisma.artemisProspectJob.create({
+      data: {
+        id: jobId,
+        client_id: params.clientId ?? null,
+        company_id: companyId,
+        requested_by: params.requestedBy,
+        goal: params.goal,
+        status: "queued",
+      },
+    });
+  } catch (error) {
+    // Artemis already accepted the job by this point (status 202 above) — a collision on jobId
+    // (a retried callback resending the same job_id) or a company/client that vanished between the
+    // lookups above and this insert are both real possibilities, and this function's contract
+    // ("never throws") means neither can be allowed to bubble past here as an uncaught exception.
+    console.error("startProspectJob: failed to record the job Artemis already accepted", jobId, error);
+    const mapped = mapPrismaError(error);
+    return { ok: false, status: mapped?.status ?? 500, message: mapped?.message ?? "Failed to record the prospect job." };
+  }
 
   return { ok: true, jobId };
 }

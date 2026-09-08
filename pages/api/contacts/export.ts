@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { handleApiError } from "@/lib/api/guards";
 import { toContactsCsv } from "@/lib/contacts/csv";
 import { buildContactsWhere } from "@/lib/api/contacts";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
@@ -45,7 +46,6 @@ export default withAuth(async (req, res, session) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.status(200).send(csv);
   } catch (e) {
-    console.error("contacts/export", e);
-    res.status(500).json({ message: "Failed to export contacts." });
+    handleApiError(res, "contacts/export", e, "Failed to export contacts.");
   }
 }, { methods: ["GET"] });

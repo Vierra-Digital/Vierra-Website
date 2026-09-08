@@ -1,11 +1,15 @@
 import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { asStr } from "@/lib/api/parsing";
+import { handleApiError } from "@/lib/api/guards";
+import { asStr, isUuid } from "@/lib/api/parsing";
 
-function asArray(v: unknown) {
-  if (Array.isArray(v)) return v.map((entry) => asStr(entry)).filter(Boolean);
-  return [];
+/** Same values `asArray` would give, but filtered to UUID-shaped ids — contact_tags.id is a
+ *  @db.Uuid column, so a malformed entry here would otherwise make Prisma throw (P2007) instead
+ *  of just being silently excluded like any other id that doesn't name a real tag. */
+function asUuidArray(v: unknown) {
+  if (!Array.isArray(v)) return [];
+  return v.map((entry) => asStr(entry)).filter(isUuid);
 }
 
 function getContactId(req: NextApiRequest) {
@@ -18,6 +22,12 @@ export default withAuth(async (req, res, session) => {
   const contactId = getContactId(req);
   if (!contactId) {
     res.status(400).json({ message: "Contact id is required." });
+    return;
+  }
+  // contacts.id is a @db.Uuid column — a non-UUID id would make Prisma throw (P2007) instead of
+  // the plain "not found" below.
+  if (!isUuid(contactId)) {
+    res.status(404).json({ message: "Contact not found." });
     return;
   }
 
@@ -45,8 +55,8 @@ export default withAuth(async (req, res, session) => {
 
     if (req.method === "POST") {
       const tagId = asStr(req.body?.tagId);
-      if (!tagId) {
-        res.status(400).json({ message: "tagId is required" });
+      if (!tagId || !isUuid(tagId)) {
+        res.status(400).json({ message: "A valid tagId is required" });
         return;
       }
       const tag = await prisma.contactTag.findFirst({ where: { id: tagId, user_id: userId } });
@@ -64,7 +74,7 @@ export default withAuth(async (req, res, session) => {
     }
 
     if (req.method === "PUT") {
-      const tagIds = asArray(req.body?.tagIds);
+      const tagIds = asUuidArray(req.body?.tagIds);
       const validTags = await prisma.contactTag.findMany({
         where: { user_id: userId, id: { in: tagIds } },
         select: { id: true },
@@ -83,8 +93,8 @@ export default withAuth(async (req, res, session) => {
 
     if (req.method === "DELETE") {
       const tagId = asStr(req.body?.tagId);
-      if (!tagId) {
-        res.status(400).json({ message: "tagId is required" });
+      if (!tagId || !isUuid(tagId)) {
+        res.status(400).json({ message: "A valid tagId is required" });
         return;
       }
       await prisma.contactTagAssignment.deleteMany({
@@ -94,7 +104,6 @@ export default withAuth(async (req, res, session) => {
       return;
     }
   } catch (e) {
-    console.error("contacts/[id]/tags", req.method, e);
-    res.status(500).json({ message: "Failed to process tag request." });
+    handleApiError(res, `contacts/[id]/tags ${req.method}`, e, "Failed to process tag request.");
   }
 }, { methods: ["GET", "POST", "PUT", "DELETE"] });

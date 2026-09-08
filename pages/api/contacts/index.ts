@@ -1,3 +1,4 @@
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
@@ -6,6 +7,7 @@ import { buildContactsWhere, serializeContact } from "@/lib/api/contacts";
 import { asQueryStr, asStr } from "@/lib/api/parsing";
 import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 import { normalizePhone } from "@/lib/contacts/phone";
+import { handleApiError } from "@/lib/api/guards";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
@@ -64,8 +66,7 @@ export default withAuth(async (req, res, session) => {
         },
       });
     } catch (e) {
-      console.error("contacts GET", e);
-      res.status(500).json({ message: "Failed to load contacts." });
+      handleApiError(res, "contacts GET", e, "Failed to load contacts.");
     }
     return;
   }
@@ -135,13 +136,13 @@ export default withAuth(async (req, res, session) => {
     } catch (e) {
       // A companyId that's UUID-shaped (resolveTargetCompanyId only hands back shaped values,
       // see lib/api/targetCompany.ts) but doesn't name a real company trips the FK constraint on
-      // contacts.company_id at insert time — answer that as a clean 400, not a generic 500.
-      if (e && typeof e === "object" && "code" in e && e.code === "P2003") {
+      // contacts.company_id at insert time — answer that with a message specific to this route
+      // rather than the mapper's generic "Referenced record not found."
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
         res.status(400).json({ message: "Target company not found." });
         return;
       }
-      console.error("contacts POST", e);
-      res.status(500).json({ message: "Failed to create contact." });
+      handleApiError(res, "contacts POST", e, "Failed to create contact.");
     }
     return;
   }

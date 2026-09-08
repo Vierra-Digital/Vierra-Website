@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { handleApiError } from "@/lib/api/guards";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asQueryStr } from "@/lib/api/parsing";
 
@@ -41,29 +42,33 @@ export default withAuth(async (req, res, session) => {
     }
 
     if (req.method === "PUT") {
-      const existing = await prisma.contactFieldVisibilitySetting.findFirst({
-        where: { user_id: userId, account_email: accountEmail },
-        select: { id: true },
-      });
-      const setting = existing
-        ? await prisma.contactFieldVisibilitySetting.update({
-            where: { id: existing.id },
-            data: {
-              show_phone: Boolean(req.body?.showPhone ?? true),
-              show_business: Boolean(req.body?.showBusiness ?? true),
-              show_website: Boolean(req.body?.showWebsite ?? true),
-            },
+      const data = {
+        show_phone: Boolean(req.body?.showPhone ?? true),
+        show_business: Boolean(req.body?.showBusiness ?? true),
+        show_website: Boolean(req.body?.showWebsite ?? true),
+      };
+      // account_id has a real (user_id, account_id) unique constraint (schema.prisma), so upsert
+      // is atomic and race-free for it — two concurrent PUTs for the same inbox can no longer both
+      // miss a find-then-create and double-insert. A null account_id (a Gmail OAuth inbox with no
+      // provider row) isn't covered by that constraint — Postgres allows more than one NULL — so it
+      // keeps the find-then-write this route already used for that case.
+      const setting = accountId
+        ? await prisma.contactFieldVisibilitySetting.upsert({
+            where: { user_id_account_id: { user_id: userId, account_id: accountId } },
+            create: { user_id: userId, account_id: accountId, account_email: accountEmail, ...data },
+            update: data,
           })
-        : await prisma.contactFieldVisibilitySetting.create({
-            data: {
-              user_id: userId,
-              account_id: accountId,
-              account_email: accountEmail,
-              show_phone: Boolean(req.body?.showPhone ?? true),
-              show_business: Boolean(req.body?.showBusiness ?? true),
-              show_website: Boolean(req.body?.showWebsite ?? true),
-            },
-          });
+        : await (async () => {
+            const existing = await prisma.contactFieldVisibilitySetting.findFirst({
+              where: { user_id: userId, account_email: accountEmail },
+              select: { id: true },
+            });
+            return existing
+              ? prisma.contactFieldVisibilitySetting.update({ where: { id: existing.id }, data })
+              : prisma.contactFieldVisibilitySetting.create({
+                  data: { user_id: userId, account_id: null, account_email: accountEmail, ...data },
+                });
+          })();
       res.status(200).json({
         visibility: {
           accountEmail,
@@ -75,7 +80,6 @@ export default withAuth(async (req, res, session) => {
       return;
     }
   } catch (e) {
-    console.error("contacts/visibility", req.method, e);
-    res.status(500).json({ message: "Failed to process visibility request." });
+    handleApiError(res, `contacts/visibility ${req.method}`, e, "Failed to process visibility request.");
   }
 }, { methods: ["GET", "PUT"] });
