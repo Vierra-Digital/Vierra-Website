@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiPlus, FiX, FiCheck, FiTrash2, FiAlertTriangle } from "react-icons/fi";
 import { Inter } from "next/font/google";
 import { useDraftGuard } from "@/hooks/useDraftGuard";
+import { useClientOptions } from "@/hooks/useClientOptions";
+import { useActiveClient } from "@/lib/activeClient";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
@@ -76,6 +78,13 @@ const CampaignsSection: React.FC = () => {
   const [deleteError, setDeleteError] = useState("");
   const [campaignSearch, setCampaignSearch] = useState("");
   const [campaignStatusFilter, setCampaignStatusFilter] = useState("all");
+  // Campaigns are strictly scoped to one company (unlike Contacts/Analytics, there's no merged
+  // "every client" view here — a campaign belongs to exactly one client's outreach), and this page
+  // previously gave no indication of which company panelFetch was actually scoping the list to, or
+  // any way to change it without leaving for the Clients page. A newly-created campaign for a
+  // client other than whichever was last active would silently not appear in this list at all.
+  const { activeClient, setActiveClient } = useActiveClient();
+  const clientOptions = useClientOptions();
 
   /** Rows after the search box and status filter. */
   const visibleCampaigns = useMemo(() => {
@@ -140,7 +149,7 @@ const CampaignsSection: React.FC = () => {
 
   useEffect(() => {
     loadCampaigns();
-  }, []);
+  }, [activeClient?.id]);
 
   if (selectedCampaignId) {
     return (
@@ -168,13 +177,36 @@ const CampaignsSection: React.FC = () => {
                 Sequenced outreach — steps, contacts and sending account per campaign.
               </p>
             </div>
-            <button
-              onClick={() => setShowNewCampaign(true)}
-              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-5 text-sm font-semibold text-white hover:bg-[#5f17a5]"
-            >
-              <FiPlus className="w-4 h-4" />
-              New Campaign
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <select
+                value={activeClient?.id ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) {
+                    setActiveClient(null);
+                    return;
+                  }
+                  const client = clientOptions.find((c) => c.id === id);
+                  if (client) setActiveClient(client);
+                }}
+                title="Campaigns belong to one client — this picks which client's campaigns you're viewing/creating."
+                className="min-h-10 rounded-md border border-[#E5E7EB] bg-white px-3 text-sm font-medium text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/30"
+              >
+                <option value="">Vierra (no client selected)</option>
+                {clientOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowNewCampaign(true)}
+                className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-5 text-sm font-semibold text-white hover:bg-[#5f17a5]"
+              >
+                <FiPlus className="w-4 h-4" />
+                New Campaign
+              </button>
+            </div>
           </div>
 
           {loading ? (

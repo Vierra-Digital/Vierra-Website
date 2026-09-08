@@ -5,6 +5,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { FiClock, FiEye, FiMousePointer, FiSend, FiShield } from "react-icons/fi";
 import { panelFetch } from "@/lib/panelFetch";
 import { useActiveClient } from "@/lib/activeClient";
+import { useClientOptions } from "@/hooks/useClientOptions";
 
 type StatMessage = {
   messageId: string | null;
@@ -228,30 +229,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   // Picking a client here scopes every section below to mail sent through THAT client's
   // campaigns (the API attributes outbound mail to a client via its optional campaign_id — ad hoc
   // sends with no campaign carry no client attribution, so they only ever show up in "All Clients").
-  const [clientOptions, setClientOptions] = useState<{ id: string; name: string }[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/admin/clients", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows) => {
-        if (cancelled || !Array.isArray(rows)) return;
-        // /api/admin/clients returns one row per representative — a company with several
-        // reps (multiple people signed in for the same business) would otherwise show as that
-        // many duplicate entries here. Collapse to one option per company_id.
-        const byCompany = new Map<string, string>();
-        for (const c of rows as { companyId?: string; businessName?: string }[]) {
-          if (c.companyId && !byCompany.has(c.companyId)) byCompany.set(c.companyId, c.businessName || "");
-        }
-        setClientOptions([...byCompany.entries()].map(([id, name]) => ({ id, name })));
-      })
-      .catch(() => {
-        /* the picker just stays empty; the merged view above still works */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const clientOptions = useClientOptions();
 
   useEffect(() => {
     let cancelled = false;
