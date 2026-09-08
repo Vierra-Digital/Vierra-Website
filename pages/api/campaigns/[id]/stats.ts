@@ -91,8 +91,15 @@ export default withAuth(async (req, res) => {
   const totalClicks = daily.reduce((sum, d) => sum + d.clicks, 0);
   const totalBounces = daily.reduce((sum, d) => sum + d.bounces, 0);
   const totalUnsubscribes = daily.reduce((sum, d) => sum + d.unsubscribes, 0);
+  // Previously `contactTotal - no_response count` — not "how many contacts replied", but "how
+  // many aren't currently no_response", which also counts contacts who exited via
+  // sendQueueTick.ts's sequence-exhaustion auto-not_interested or a bounce/unsubscribe/DNC
+  // removal, neither of which involved a reply. The daily counter is the actual reply signal
+  // (bumped by both the Smartlead webhook and, as of this fix, the internal-provider inbound-reply
+  // path in lib/gmail/inboundActions.ts) — same source as opens/clicks/bounces/unsubscribes above,
+  // so it's summed and rated the same way as those instead of derived from lead_status.
+  const totalReplies = daily.reduce((sum, d) => sum + d.replies, 0);
   const leadStatusCounts = Object.fromEntries(leadStatusGroups.map((g) => [g.lead_status, g._count]));
-  const repliedCount = contactTotal - (leadStatusCounts["no_response"] ?? 0);
 
   // Per-step engagement — where the sequence loses people. Sent/opened/clicked only: attributing
   // a reply to one specific step would mean inferring it from timing (nothing records which step
@@ -135,13 +142,13 @@ export default withAuth(async (req, res) => {
       bounces: totalBounces,
       unsubscribes: totalUnsubscribes,
       contacts: contactTotal,
-      replied: repliedCount,
+      replied: totalReplies,
       booked: bookedContacts,
     },
     rates: {
       openRate: totalSent > 0 ? totalOpens / totalSent : 0,
       clickRate: totalSent > 0 ? totalClicks / totalSent : 0,
-      replyRate: contactTotal > 0 ? repliedCount / contactTotal : 0,
+      replyRate: totalSent > 0 ? totalReplies / totalSent : 0,
       bounceRate: totalSent > 0 ? totalBounces / totalSent : 0,
       unsubscribeRate: totalSent > 0 ? totalUnsubscribes / totalSent : 0,
       bookingRate: contactTotal > 0 ? bookedContacts / contactTotal : 0,

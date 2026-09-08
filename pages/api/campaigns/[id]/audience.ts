@@ -2,6 +2,7 @@ import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { syncCampaignAudience } from "@/lib/campaigns/audienceSync";
+import { isUuid } from "@/lib/api/parsing";
 
 function getCampaignId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -28,8 +29,11 @@ export default withAuth(async (req, res) => {
     return;
   }
 
+  // contact_tags.id is a @db.Uuid column — a malformed entry would otherwise make the
+  // `{ tag_id: { in: tagIds } }` lookup in syncCampaignAudience throw (P2007) instead of just not
+  // matching, and it would sit in audience_filter as garbage even though it can never match a tag.
   const tagIds = Array.isArray(req.body?.tagIds)
-    ? req.body.tagIds.filter((v: unknown): v is string => typeof v === "string")
+    ? req.body.tagIds.filter((v: unknown): v is string => typeof v === "string" && isUuid(v))
     : [];
 
   await prisma.campaign.update({

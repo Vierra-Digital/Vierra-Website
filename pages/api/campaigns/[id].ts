@@ -1,7 +1,7 @@
 import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { asStr } from "@/lib/api/parsing";
+import { asStr, parseOptionalDate } from "@/lib/api/parsing";
 import { campaignPreflight } from "@/lib/campaigns/preflight";
 import { serializeCampaign } from "@/lib/api/campaigns";
 import {
@@ -249,7 +249,15 @@ export default withAuth(async (req, res) => {
     const sendDelaySeconds = Number(req.body?.sendDelaySeconds);
     const sendJitterSeconds = Number(req.body?.sendJitterSeconds);
     const dailySendLimit = Number(req.body?.dailySendLimit);
-    const scheduledStartAtRaw = req.body?.scheduledStartAt;
+    let scheduledStartAt = existing.scheduled_start_at;
+    if (req.body?.scheduledStartAt !== undefined) {
+      const parsed = parseOptionalDate(asStr(req.body?.scheduledStartAt));
+      if (!parsed.ok) {
+        res.status(400).json({ message: "scheduledStartAt must be a valid date." });
+        return;
+      }
+      scheduledStartAt = parsed.value;
+    }
 
     const updated = await prisma.campaign.update({
       where: { id },
@@ -267,10 +275,7 @@ export default withAuth(async (req, res) => {
           req.body?.dailySendLimit !== undefined && Number.isFinite(dailySendLimit) && dailySendLimit > 0
             ? Math.floor(dailySendLimit)
             : existing.daily_send_limit,
-        scheduled_start_at:
-          req.body?.scheduledStartAt !== undefined
-            ? (asStr(scheduledStartAtRaw) ? new Date(asStr(scheduledStartAtRaw)) : null)
-            : existing.scheduled_start_at,
+        scheduled_start_at: scheduledStartAt,
         audience_filter: req.body?.audienceFilter !== undefined ? req.body.audienceFilter : existing.audience_filter,
       },
       include: {

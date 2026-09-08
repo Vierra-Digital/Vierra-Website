@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { addLeadsToCampaign, type SmartleadLead } from "@/lib/campaigns/smartlead/client";
 import { mapInBatches } from "@/lib/batch";
+import { isUuid } from "@/lib/api/parsing";
 
 type AudienceFilter = {
   tagIds?: string[];
@@ -100,7 +101,11 @@ export async function syncCampaignAudience(campaignId: string): Promise<{ enroll
   });
 
   const filter = (campaign.audience_filter as AudienceFilter | null) ?? {};
-  const tagIds = Array.isArray(filter.tagIds) ? filter.tagIds.filter((v): v is string => typeof v === "string") : [];
+  // contact_tags.id is a @db.Uuid column — a malformed entry would otherwise make the
+  // `{ in: tagIds }` filter below throw (P2007). audience_filter is stored JSON, not
+  // schema-validated, so this defends against stale/dirty rows even though the write path
+  // (pages/api/campaigns/[id]/audience.ts) now also filters to valid UUIDs before saving.
+  const tagIds = Array.isArray(filter.tagIds) ? filter.tagIds.filter((v): v is string => typeof v === "string" && isUuid(v)) : [];
 
   const where: any = { company_id: campaign.company_id };
   if (tagIds.length > 0) {

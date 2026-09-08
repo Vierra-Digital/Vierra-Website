@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { asStr, asQueryStr } from "@/lib/api/parsing";
+import { asStr, asQueryStr, parseOptionalDate } from "@/lib/api/parsing";
 import { serializeCampaign, CAMPAIGN_STATUSES, SEND_PROVIDERS } from "@/lib/api/campaigns";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
@@ -87,7 +87,11 @@ export default withAuth(async (req, res, session) => {
     const sendDelaySeconds = Number(req.body?.sendDelaySeconds);
     const sendJitterSeconds = Number(req.body?.sendJitterSeconds);
     const dailySendLimit = Number(req.body?.dailySendLimit);
-    const scheduledStartAtRaw = asStr(req.body?.scheduledStartAt);
+    const scheduledStartAt = parseOptionalDate(asStr(req.body?.scheduledStartAt));
+    if (!scheduledStartAt.ok) {
+      res.status(400).json({ message: "scheduledStartAt must be a valid date." });
+      return;
+    }
 
     const created = await prisma.campaign.create({
       data: {
@@ -100,7 +104,7 @@ export default withAuth(async (req, res, session) => {
         send_delay_seconds: Number.isFinite(sendDelaySeconds) && sendDelaySeconds >= 30 ? Math.floor(sendDelaySeconds) : 60,
         send_jitter_seconds: Number.isFinite(sendJitterSeconds) && sendJitterSeconds >= 0 ? Math.floor(sendJitterSeconds) : 30,
         daily_send_limit: Number.isFinite(dailySendLimit) && dailySendLimit > 0 ? Math.floor(dailySendLimit) : 50,
-        scheduled_start_at: scheduledStartAtRaw ? new Date(scheduledStartAtRaw) : null,
+        scheduled_start_at: scheduledStartAt.value,
       },
       include: {
         email_provider_accounts: { select: { account_email: true } },
