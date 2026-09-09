@@ -24,6 +24,7 @@ import {
   FiBarChart2,
   FiSend,
   FiCreditCard,
+  FiDollarSign,
   FiSettings,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
@@ -37,14 +38,14 @@ import { PANEL_SECTIONS, resolvePanelSection } from "@/lib/panel/navigation"
  * artemis, which this branch removed from the panel — so a URL naming one of those has to be caught
  * here instead of switching to a section with nothing behind it.
  */
-const RENDERED_SECTIONS = new Set([0, 1, 2, 5, 6, 8, 9, 10])
+const RENDERED_SECTIONS = new Set([0, 1, 2, 5, 6, 8, 9, 10, 12])
 
 /**
  * Sections whose markup is gated on !isStaff. resolvePanelSection already withholds 8 and 9 from
  * staff, but not 1 — it has no reason to, since Clients is staff-visible on master. Here it is not,
  * so a staff member following ?section=clients would land on a section that renders nothing.
  */
-const ADMIN_ONLY_SECTIONS = new Set([1, 8, 9])
+const ADMIN_ONLY_SECTIONS = new Set([1, 8, 9, 12])
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
   { ssr: false }
@@ -76,6 +77,10 @@ const ProjectManagement = dynamic(
 )
 const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
+  { ssr: false }
+)
+const FinancesSection = dynamic(
+  () => import("@/components/PanelPages/FinancesSection"),
   { ssr: false }
 )
 const ClientBillingSection = dynamic(
@@ -476,6 +481,21 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   </span>
                 </button>
                 
+                {/* Admins only. Staff run campaigns for clients; company-wide takings are not
+                    part of that job, and /api/finances/overview refuses them as well. */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    aria-current={currentSection === 12 && !showSettings ? "page" : undefined}
+                    onClick={() => navigateSection(12)}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 12 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  >
+                    <FiDollarSign className="w-4 h-4 shrink-0" />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
+                      Finances
+                    </span>
+                  </button>
+                )}
                 {!isStaff && (
                   <button
                     type="button"
@@ -700,6 +720,14 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {visitedSections.has(10) && (
                         <div key={`section-10-${sectionEpoch[10] || 0}`} style={{ display: currentSection === 10 ? undefined : "none" }}>
                           <FilesSection refreshTrigger={filesVisitCount} />
+                        </div>
+                      )}
+                      {/* Admin only, matching the nav entry and /api/finances/overview. Gated on
+                          isAdmin as well as the visited set, so a staff member who reached
+                          ?section=finances still mounts nothing. */}
+                      {isAdmin && visitedSections.has(12) && (
+                        <div key={`section-12-${sectionEpoch[12] || 0}`} style={{ display: currentSection === 12 ? undefined : "none" }}>
+                          <FinancesSection />
                         </div>
                       )}
                     </>
