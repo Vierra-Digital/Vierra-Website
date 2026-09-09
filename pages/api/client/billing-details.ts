@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveBillingClient } from "@/lib/api/billingClient";
 
 /**
  * Edit the billing details Stripe holds for a customer: who the invoices are addressed to, and
@@ -109,16 +109,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     // Scoped the same way the read is: a representative reaches only their own row.
-    const client =
-      session.kind === "client"
-        ? await prisma.client.findFirst({
-            where: { id: session.clientId },
-            select: { client_billing: { select: { stripe_customer_id: true } } },
-          })
-        : await prisma.client.findFirst({
-            where: { company_id: companyId },
-            select: { client_billing: { select: { stripe_customer_id: true } } },
-          });
+    // The same resolver the read uses, so an edit cannot land on a different client than the
+    // page was showing.
+    const client = await resolveBillingClient({
+      kind: session.kind,
+      clientId: session.kind === "client" ? session.clientId : undefined,
+      companyId,
+    });
 
     const customerId = client?.client_billing?.stripe_customer_id;
     if (!customerId) return res.status(404).json({ message: "No billing account yet." });
