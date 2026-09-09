@@ -184,10 +184,10 @@ export const PanelStat: React.FC<{
      tile to the tallest, so with the hint sitting straight after the value each one landed at a
      different height and the row read as misaligned. mt-auto puts them all on one baseline; where
      every tile has a hint (or none does) nothing moves. */
-  <div className="flex h-full flex-col rounded-xl bg-[#F1EFF6] px-3.5 py-3.5 transition-colors duration-150 hover:bg-[#EBE8F3]">
-    <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
+  <div className="flex h-full flex-col rounded-xl bg-[#F1EFF6] px-4 py-4 transition-colors duration-150 hover:bg-[#EBE8F3]">
+    <h3 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
     <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-[#111827]">{value}</div>
-    {hint ? <div className="mt-auto pt-1.5 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
+    {hint ? <div className="mt-auto pt-2 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
   </div>
 )
 

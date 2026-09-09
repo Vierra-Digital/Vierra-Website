@@ -38,9 +38,9 @@ export function billingRows(details: BillingDetails): [string, string][] {
   const locality = [address?.city, address?.state, address?.postalCode].filter(Boolean).join(", ");
   const lines: [string, string | null | undefined][] = [
     ["Billed to", details.name],
-    ["Billing Email", details.email],
+    ["Email", details.email],
     ["Phone", details.phone],
-    ["Address", address?.line1],
+    ["Billing Address", address?.line1],
     ["", address?.line2],
     ["", locality || null],
     ["Country", address?.country],

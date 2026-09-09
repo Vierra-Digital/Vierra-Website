@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react"
 import { inter } from "@/lib/fonts"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { useFetch } from "@/hooks/useFetch"
-import { FiDownload, FiExternalLink } from "react-icons/fi"
+import { FiExternalLink } from "react-icons/fi"
 import {
     PanelBadge,
     PanelCard,
@@ -18,6 +18,8 @@ import {
 } from "@/components/panel/PanelTable"
 import { billingRows, hasBillingDetails, type BillingDetails } from "@/lib/billing/billingDetails"
 import { summariseBilling } from "@/lib/billing/summary"
+import { invoiceDueDate } from "@/lib/billing/dueDate"
+import EditBillingDetailsModal from "@/components/panel/EditBillingDetailsModal"
 
 type PaymentMethod = {
     id: string
@@ -121,14 +123,28 @@ const describeLine = (description: string | null) => {
     return trimmed
 }
 
+/** The Transaction Log's own default, distinct from the invoice line's. */
+const DEFAULT_TRANSACTION = "Vierra Lead Generation"
+
+const describeTransaction = (description: string | null) => {
+    const trimmed = (description ?? "").trim()
+    if (!trimmed || GENERATED_LINES.has(trimmed.toLowerCase())) return DEFAULT_TRANSACTION
+    return trimmed
+}
+
+/** "Succeeded" is Stripe's word for the charge state; the log reads as a ledger. */
+const PAYMENT_LABELS: Record<string, string> = {
+    succeeded: "Completed",
+}
+
 /** "visa" reads as "Visa"; a bank account says which bank rather than which brand. */
 const describeMethod = (method: PaymentMethod) => {
     if (method.type === "card") {
         const brand = method.brand ? method.brand.charAt(0).toUpperCase() + method.brand.slice(1) : "Card"
-        return `${brand} ending ${method.last4 ?? "••••"}`
+        return `${brand} ending in ${method.last4 ?? "••••"}.`
     }
     if (method.type === "us_bank_account") {
-        return `${method.bankName ?? "Bank account"} ending ${method.last4 ?? "••••"}`
+        return `${method.bankName ?? "Bank account"} ending in ${method.last4 ?? "••••"}.`
     }
     return method.type.replace(/_/g, " ")
 }
@@ -144,6 +160,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
     const [openingPortal, setOpeningPortal] = useState(false)
     const [portalError, setPortalError] = useState("")
     const [renewalBusy, setRenewalBusy] = useState(false)
+    const [editingDetails, setEditingDetails] = useState(false)
 
     const fetcher = useCallback(async () => {
         const url = companyId
@@ -238,9 +255,11 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                             <PanelStat
                                 label="Paid To Date"
                                 value={money(paidCents)}
-                                // Named when there is one, so the figure reconciles with the
-                                // Payments table below rather than looking short by that amount.
-                                hint={refundedCents > 0 ? `After ${money(refundedCents)} refunded` : undefined}
+                                // A refund is named when there is one, so the figure reconciles
+                                // with the Transaction Log below rather than looking short by that
+                                // amount. "Total" otherwise, so the tile never sits captionless
+                                // beside three that carry one.
+                                hint={refundedCents > 0 ? `Total, after ${money(refundedCents)} refunded` : "Total"}
                             />
                             <PanelStat
                                 label="Outstanding"
@@ -331,7 +350,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                         <span>{describeMethod(method)}</span>
                                                         {method.expMonth && method.expYear && (
                                                             <span className="text-[#6B7280]">
-                                                                expires {String(method.expMonth).padStart(2, "0")}/
+                                                                Expires at {String(method.expMonth).padStart(2, "0")}/
                                                                 {method.expYear}
                                                             </span>
                                                         )}
@@ -353,7 +372,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 <span>
                                                     {data.subscription.cancelAtPeriodEnd
                                                         ? `Off. Access ends ${date(data.subscription.currentPeriodEnd)}.`
-                                                        : `On. Renews ${date(data.subscription.currentPeriodEnd)}.`}
+                                                        : `Renews on ${date(data.subscription.currentPeriodEnd)}.`}
                                                 </span>
                                                 {canManage && (
                                                     <button
@@ -373,6 +392,16 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                         )}
                                     </dd>
                                 </dl>
+
+                                {/* Under the details rather than in the header, so it is where
+                                    someone who has just read them and spotted a typo is looking. */}
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingDetails(true)}
+                                    className="mt-4 h-9 rounded-[10px] border border-[#D8D2E4] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:border-[#701CC0]/45 hover:bg-[#F5F3F9]"
+                                >
+                                    Edit Billing Information
+                                </button>
                             </div>
                         </PanelCard>
 
@@ -406,7 +435,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 </PanelTd>
                                                 <PanelTd className="whitespace-nowrap text-[#6B7280]">{date(invoice.created)}</PanelTd>
                                                 <PanelTd className="whitespace-nowrap text-[#6B7280]">
-                                                    {invoice.dueDate ? date(invoice.dueDate) : "On receipt"}
+                                                    {date(invoiceDueDate({ createdIso: invoice.created, stripeDueIso: invoice.dueDate, renewalIso: data.subscription?.currentPeriodEnd ?? null }))}
                                                 </PanelTd>
                                                 <PanelTd className="text-[#6B7280]">{describeLine(invoice.description)}</PanelTd>
                                                 <PanelTd>
@@ -423,7 +452,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                     )}
                                                 </PanelTd>
                                                 <PanelTd className="text-right">
-                                                    <div className="flex items-center justify-end gap-3">
+                                                    <div className="flex items-center justify-end gap-3 empty:before:text-[#9CA3AF] empty:before:content-['—']">
                                                         {/* Stripe's hosted page is where an open invoice is paid — it takes
                                                             the card, not us. Both open in a new tab so the panel is still
                                                             behind them when the reader comes back. */}
@@ -447,19 +476,6 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                             >
                                                                 View
                                                             </a>
-                                                        )}
-                                                        {invoice.pdfUrl ? (
-                                                            <a
-                                                                href={invoice.pdfUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1.5 rounded font-medium text-[#701CC0] hover:underline"
-                                                            >
-                                                                <FiDownload className="h-3.5 w-3.5" />
-                                                                PDF
-                                                            </a>
-                                                        ) : (
-                                                            <span className="text-[#9CA3AF]">—</span>
                                                         )}
                                                     </div>
                                                 </PanelTd>
@@ -494,7 +510,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 <PanelTr key={payment.id}>
                                                     <PanelTd className="whitespace-nowrap text-[#6B7280]">{date(payment.created)}</PanelTd>
                                                     <PanelTd className="text-[#111827]">
-                                                        {payment.description ?? "Payment"}
+                                                        {describeTransaction(payment.description)}
                                                         {payment.failureMessage && (
                                                             <span className="block text-[12px] text-[#B42318]">{payment.failureMessage}</span>
                                                         )}
@@ -509,7 +525,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                     </PanelTd>
                                                     <PanelTd>
                                                         <PanelBadge tone={PAYMENT_TONES[payment.status] ?? "neutral"}>
-                                                            {titleCase(payment.status)}
+                                                            {PAYMENT_LABELS[payment.status] ?? titleCase(payment.status)}
                                                         </PanelBadge>
                                                     </PanelTd>
                                                     <PanelTd className="text-right font-medium tabular-nums">
@@ -539,6 +555,17 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                     </>
                 )}
             </PanelPage>
+
+            {editingDetails && (
+                <EditBillingDetailsModal
+                    details={data?.billingDetails}
+                    companyId={companyId}
+                    onClose={() => setEditingDetails(false)}
+                    onSaved={async () => {
+                        await run()
+                    }}
+                />
+            )}
         </div>
     )
 }

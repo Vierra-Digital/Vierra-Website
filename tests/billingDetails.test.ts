@@ -49,9 +49,9 @@ describe("billingRows", () => {
   it("prints the full set in invoice order", () => {
     expect(billingRows(full)).toEqual([
       ["Billed to", "Iron & Water Co."],
-      ["Billing Email", "billing@ironandwater.test"],
+      ["Email", "billing@ironandwater.test"],
       ["Phone", "+1 617 555 0142"],
-      ["Address", "3 Ashland Street"],
+      ["Billing Address", "3 Ashland Street"],
       ["", "Suite 200"],
       ["", "Medford, MA, 02155"],
       ["Country", "US"],
@@ -69,7 +69,7 @@ describe("billingRows", () => {
     });
     expect(rows).toEqual([
       ["Billed to", "Acme"],
-      ["Address", "1 Main St"],
+      ["Billing Address", "1 Main St"],
       ["Country", "US"],
     ]);
     expect(rows.every(([, value]) => value.length > 0)).toBe(true);
@@ -98,7 +98,7 @@ describe("billingRows", () => {
     // Repeating "Address" against line2 and the locality would read as three separate addresses.
     const rows = billingRows(full);
     const addressRows = rows.slice(3, 6);
-    expect(addressRows.map(([label]) => label)).toEqual(["Address", "", ""]);
+    expect(addressRows.map(([label]) => label)).toEqual(["Billing Address", "", ""]);
   });
 
   it("survives an address whose only content is a country", () => {
