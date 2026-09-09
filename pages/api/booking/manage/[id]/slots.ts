@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asStr, isUuid } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy, type BusyInterval } from "@/lib/calendar/googleCalendar";
+import { getBusy, resolveVisibleCalendarIds, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 
@@ -37,7 +37,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     calendarBusy = await getTeamBusyIntersection(link.company_id, now.toISOString(), rangeEnd.toISOString());
   } else {
     const token = await getValidGmailAccessToken(link.user_id, link.account_email);
-    const result = token.ok ? await getBusy(token.accessToken, now.toISOString(), rangeEnd.toISOString()) : null;
+    const calendarIds = token.ok ? await resolveVisibleCalendarIds(link.user_id, link.account_email, token.accessToken) : ["primary"];
+    const result = token.ok ? await getBusy(token.accessToken, now.toISOString(), rangeEnd.toISOString(), calendarIds) : null;
     // null means we couldn't check the calendar, not that it's empty — treating it as `[]` would
     // offer reschedule times over meetings we simply failed to see (see slots.ts's fail-closed fix).
     if (result === null) {
