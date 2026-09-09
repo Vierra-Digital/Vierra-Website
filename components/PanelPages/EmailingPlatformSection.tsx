@@ -41,6 +41,8 @@ import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 
 import { isSafeEmailHref, stripRemoteUrlsFromStyle, UNSAFE_EMAIL_TAG_SELECTOR } from "@/lib/email/htmlSafety";
 import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import KeyboardShortcutsModal from "@/components/email/KeyboardShortcutsModal";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import MoveToMenu from "@/components/email/MoveToMenu";
 import MeetingInviteCard from "@/components/email/MeetingInviteCard";
@@ -1773,6 +1775,37 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     },
     [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey, selectedMessageRows, selectedRows, showSentToast, undoMailboxAction]
+  );
+
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const hasOpenMessage = viewMode === "message" && Boolean(selectedMessage);
+  useKeyboardShortcuts(
+    {
+      hasOpenMessage,
+      canActOnSelection: hasOpenMessage || hasSelectedEmails,
+      onArchive: () => void applyAction("archive"),
+      onTrash: () => void applyAction(deletesPermanently ? "deletePermanently" : "trash"),
+      onMarkRead: () => void applyAction("markRead"),
+      onMarkUnread: () => void applyAction("markUnread"),
+      onToggleStar: () => {
+        if (selectedMessage) void toggleStar(selectedMessage);
+      },
+      onCompose: () => void compose.openNewCompose(),
+      onReply: () => void compose.openReplyCompose(),
+      onReplyAll: () => void compose.openReplyAllCompose(),
+      onForward: () => void compose.openForwardCompose(),
+      onClose: () => {
+        if (viewMode === "message") {
+          setViewMode("list");
+          setSelectedMessageId("");
+        }
+      },
+      onShowHelp: () => setShowShortcutsHelp((prev) => !prev),
+    },
+    // Disabled entirely while a compose window is open — the editable-focus guard alone doesn't
+    // cover every element inside compose (its own buttons, toolbars), so a shortcut key pressed
+    // right after clicking one of those could still leak through to the mailbox underneath it.
+    !compose.isComposeOpen
   );
 
   // Snooze the selected messages until a preset time; the inbound cron re-surfaces them.
@@ -3549,6 +3582,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       <ComposeWindow compose={compose} />
       <ContactsModals contacts={contacts} />
+      {showShortcutsHelp && <KeyboardShortcutsModal onClose={() => setShowShortcutsHelp(false)} />}
 
       <SuccessStatusModal
         isOpen={blockSuccessModal.open}
