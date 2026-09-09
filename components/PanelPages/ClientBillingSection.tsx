@@ -56,6 +56,8 @@ type Payment = {
     created: string
     description: string | null
     receiptUrl: string | null
+    /** The hosted invoice this charge paid, when it paid one; the column reads Invoice. */
+    invoiceUrl?: string | null
     failureMessage: string | null
     brand: string | null
     last4: string | null
@@ -218,19 +220,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
     return (
         <div className={inter.className}>
             <PanelPage>
-                <PanelHeader title="Billing">
-                    {canManage && data?.connected && (
-                        <button
-                            type="button"
-                            onClick={() => void openPortal()}
-                            disabled={openingPortal}
-                            className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            <FiExternalLink className="h-4 w-4" />
-                            {openingPortal ? "Opening…" : "Manage Payment"}
-                        </button>
-                    )}
-                </PanelHeader>
+                <PanelHeader title="Billing" />
 
                 {error ? (
                     <p role="alert" className="flex flex-wrap items-center justify-center gap-2 py-12 text-[13px] text-[#B42318]">
@@ -301,18 +291,8 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                             The renewal control came with it; removing the boxes should not remove
                             the only way to turn renewal off. */}
                         <PanelCard className="mb-4">
-                            <div className="flex items-center justify-between gap-3 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
+                            <div className="border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
                                 <h3 className="text-[13px] font-semibold text-[#111827]">Billing Information</h3>
-                                {canManage && (
-                                    <button
-                                        type="button"
-                                        onClick={() => void openPortal()}
-                                        disabled={openingPortal}
-                                        className="rounded text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5] disabled:opacity-50"
-                                    >
-                                        {openingPortal ? "Opening…" : "Edit in Stripe"}
-                                    </button>
-                                )}
                             </div>
                             <div className="p-4">
                                 {/* A definition list on a fixed label column, so the values line up
@@ -395,13 +375,26 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
 
                                 {/* Under the details rather than in the header, so it is where
                                     someone who has just read them and spotted a typo is looking. */}
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingDetails(true)}
-                                    className="mt-4 h-9 rounded-[10px] border border-[#D8D2E4] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:border-[#701CC0]/45 hover:bg-[#F5F3F9]"
-                                >
-                                    Edit Billing Information
-                                </button>
+                                <div className="mt-4 flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingDetails(true)}
+                                        className="h-9 rounded-[10px] bg-[#4C1191] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#3B0D71]"
+                                    >
+                                        Edit Billing Information
+                                    </button>
+                                    {/* The two halves of "billing": the details are ours to edit,
+                                        the card is Stripe's. This one leaves the panel. */}
+                                    <button
+                                        type="button"
+                                        onClick={() => void openPortal()}
+                                        disabled={openingPortal}
+                                        className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#D8D2E4] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:border-[#701CC0]/45 hover:bg-[#F5F3F9] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <FiExternalLink className="h-4 w-4" />
+                                        {openingPortal ? "Opening…" : "Manage Payments"}
+                                    </button>
+                                </div>
                             </div>
                         </PanelCard>
 
@@ -502,7 +495,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 <PanelTh>Method</PanelTh>
                                                 <PanelTh>Status</PanelTh>
                                                 <PanelTh className="!text-right">Amount</PanelTh>
-                                                <PanelTh className="!text-right">Receipt</PanelTh>
+                                                <PanelTh className="!text-right">Invoice</PanelTh>
                                             </PanelTr>
                                         </PanelThead>
                                         <PanelTbody>
@@ -532,9 +525,9 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                         {money(payment.amountCents, payment.currency)}
                                                     </PanelTd>
                                                     <PanelTd className="text-right">
-                                                        {payment.receiptUrl ? (
+                                                        {(payment.invoiceUrl ?? payment.receiptUrl) ? (
                                                             <a
-                                                                href={payment.receiptUrl}
+                                                                href={(payment.invoiceUrl ?? payment.receiptUrl)!}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 className="rounded font-medium text-[#701CC0] hover:underline"

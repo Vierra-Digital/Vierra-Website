@@ -3,6 +3,7 @@ import { parseCookie } from "@/lib/api/cookies"
 import { prisma } from "@/lib/prisma"
 import { stripe } from "@/lib/stripe"
 import { resolveBaseUrl } from "@/lib/api/url"
+import { getRetainerProductId } from "@/lib/stripe/retainerProduct"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -62,6 +63,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const successUrl = `${baseUrl}/stripe/success`
   const cancelUrl = `${baseUrl}/onboarding/${onboardingToken}`
 
+  /**
+   * One product for the service, referenced by id — not `product_data`, which makes Stripe create
+   * one on the fly.
+   *
+   * That produced a separate product per client named "<Business> Monthly Retainer", so the
+   * invoice line read "1 × Acme Co Monthly Retainer (at $1,000.00 / month)": the client's own name
+   * quoted back at them on the invoice they are paying. Worse, Stripe marks products it created
+   * that way as automatic and immutable — renaming one fails outright — so the existing ones
+   * cannot be corrected. A product we create ourselves can be.
+   */
+  const retainerProductId = await getRetainerProductId(stripe)
+
   const checkoutSession = await stripe.checkout.sessions.create({
     customer: stripeCustomerId,
     mode: "subscription",
@@ -73,9 +86,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           currency: "usd",
           unit_amount: monthlyRetainerCents,
           recurring: { interval: "month" },
-          product_data: {
-            name: `${client.business_name} Monthly Retainer`,
-          },
+          product: retainerProductId,
         },
       },
     ],

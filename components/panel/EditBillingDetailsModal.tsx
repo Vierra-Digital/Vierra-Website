@@ -17,6 +17,8 @@ import type { BillingDetails } from "@/lib/billing/billingDetails"
 const FIELD =
     "h-9 w-full rounded-[10px] border border-[#E4E0EC] bg-white px-3 text-[13px] text-[#111827] placeholder:text-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35"
 
+const DEFAULT_PHONE = "+1 333 333 3333"
+
 const LABEL = "mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]"
 
 type Props = {
@@ -30,7 +32,9 @@ type Props = {
 const EditBillingDetailsModal: React.FC<Props> = ({ details, companyId, onClose, onSaved }) => {
     const [name, setName] = useState(details?.name ?? "")
     const [email, setEmail] = useState(details?.email ?? "")
-    const [phone, setPhone] = useState(details?.phone ?? "")
+    // Stripe holds no phone for any customer yet, so the field offers the house format
+    // rather than an empty box that gives no hint what shape it wants.
+    const [phone, setPhone] = useState(details?.phone ?? DEFAULT_PHONE)
     const [line1, setLine1] = useState(details?.address?.line1 ?? "")
     const [line2, setLine2] = useState(details?.address?.line2 ?? "")
     const [city, setCity] = useState(details?.address?.city ?? "")
@@ -137,10 +141,6 @@ const EditBillingDetailsModal: React.FC<Props> = ({ details, companyId, onClose,
             </div>
 
             {error && <p role="alert" className="mt-3 text-[13px] text-[#B42318]">{error}</p>}
-
-            <p className="mt-4 text-[12px] text-[#6B7280]">
-                Saved straight to Stripe. Card details are not edited here — use Manage Payment for those.
-            </p>
 
             <div className="mt-5 flex justify-end gap-2">
                 <button

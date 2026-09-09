@@ -48,7 +48,7 @@ describe("hasBillingDetails", () => {
 describe("billingRows", () => {
   it("prints the full set in invoice order", () => {
     expect(billingRows(full)).toEqual([
-      ["Billed to", "Iron & Water Co."],
+      ["Billed To", "Iron & Water Co."],
       ["Email", "billing@ironandwater.test"],
       ["Phone", "+1 617 555 0142"],
       ["Billing Address", "3 Ashland Street"],
@@ -68,7 +68,7 @@ describe("billingRows", () => {
       address: { line1: "1 Main St", line2: null, city: null, state: null, postalCode: null, country: "US" },
     });
     expect(rows).toEqual([
-      ["Billed to", "Acme"],
+      ["Billed To", "Acme"],
       ["Billing Address", "1 Main St"],
       ["Country", "US"],
     ]);

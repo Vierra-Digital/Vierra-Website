@@ -169,6 +169,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         created: new Date(charge.created * 1000).toISOString(),
         description: charge.description,
         receiptUrl: charge.receipt_url ?? null,
+        // The Transaction Log's last column is the invoice, not the receipt: a receipt is Stripe's
+        // acknowledgement of a card charge, an invoice is the document the client is actually
+        // billed on. Matched from the invoices already fetched above rather than a second round
+        // trip. A charge taken outside an invoice has none, and falls back to the receipt.
+        invoiceUrl: ((): string | null => {
+          // charge.invoice is still on the wire but no longer on Stripe's TypeScript Charge, so
+          // it is read through a narrow cast rather than by widening the whole object.
+          const invoiceId = (charge as unknown as { invoice?: string | null }).invoice;
+          if (typeof invoiceId !== "string") return null;
+          return invoices.find((i) => i.id === invoiceId)?.hosted_invoice_url ?? null;
+        })(),
         failureMessage: charge.failure_message ?? null,
         brand: charge.payment_method_details?.card?.brand ?? null,
         last4: charge.payment_method_details?.card?.last4 ?? null,
