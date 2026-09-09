@@ -6,6 +6,12 @@ import LTVCalculatorModal from "@/components/panel/LTVCalculatorModal"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { panelFetch } from "@/lib/panelFetch"
+import {
+    resolveLocalTimeZone,
+    formatMeetingDate as formatMeetingDateShared,
+    isMeetingToday as isMeetingTodayShared,
+    formatMeetingTimeRange as formatMeetingTimeRangeShared,
+} from "@/lib/meetingFormat"
 
 type GrowthDirection = "up" | "flat" | "down"
 type DashboardStatKey =
@@ -344,13 +350,7 @@ const DashboardSection = () => {
         }
     }
 
-    const localTimeZone = useMemo(() => {
-        try {
-            return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-        } catch {
-            return "UTC"
-        }
-    }, [])
+    const localTimeZone = useMemo(() => resolveLocalTimeZone(), [])
 
     /**
      * Drop anything already finished. The cache is synced periodically, so a meeting that ended
@@ -362,85 +362,10 @@ const DashboardSection = () => {
         return clientNow ? end >= clientNow.getTime() : true
     })
 
-    const formatMeetingDate = (iso: string) => {
-        const date = new Date(iso)
-        const now = new Date()
-        const meetingDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone: localTimeZone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-        }).format(date)
-        const todayDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone: localTimeZone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-        }).format(now)
-        const tomorrow = new Date(now)
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        const tomorrowDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone: localTimeZone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-        }).format(tomorrow)
-
-        if (meetingDay === todayDay) return "Today"
-        if (meetingDay === tomorrowDay) return "Tomorrow"
-
-        return new Intl.DateTimeFormat(undefined, {
-            month: "2-digit",
-            day: "2-digit",
-            year: "numeric",
-            timeZone: localTimeZone,
-        }).format(date)
-    }
-
-    const isMeetingToday = (iso: string) => {
-        const date = new Date(iso)
-        const now = new Date()
-        const meetingDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone: localTimeZone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-        }).format(date)
-        const todayDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone: localTimeZone,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-        }).format(now)
-        return meetingDay === todayDay
-    }
-
-    const formatMeetingTime = (iso: string) => {
-        const date = new Date(iso)
-        return new Intl.DateTimeFormat(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-            timeZone: localTimeZone,
-        }).format(date)
-    }
-
-    const localTimeZoneAbbreviation = (iso: string) => {
-        const date = new Date(iso)
-        return new Intl.DateTimeFormat(undefined, {
-            timeZone: localTimeZone,
-            timeZoneName: "short",
-        })
-            .formatToParts(date)
-            .find((part) => part.type === "timeZoneName")?.value
-    }
-
-    const formatMeetingTimeRange = (startIso: string, endIso: string | null) => {
-        const start = formatMeetingTime(startIso)
-        const range = endIso ? `${start} - ${formatMeetingTime(endIso)}` : start
-        const zoneAbbreviation = localTimeZoneAbbreviation(startIso)
-        return zoneAbbreviation ? `${range} ${zoneAbbreviation}` : range
-    }
+    const formatMeetingDate = (iso: string) => formatMeetingDateShared(iso, localTimeZone)
+    const isMeetingToday = (iso: string) => isMeetingTodayShared(iso, localTimeZone)
+    const formatMeetingTimeRange = (startIso: string, endIso: string | null) =>
+        formatMeetingTimeRangeShared(startIso, endIso, localTimeZone)
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
