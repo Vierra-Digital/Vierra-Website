@@ -34,6 +34,18 @@ interface UserSettingsPageProps {
   readOnly?: boolean;
   /** Whose billing to read when this is somebody else's page. */
   billingCompanyId?: string | null;
+  /**
+   * Fired after any change that the rest of the panel renders from — a saved setting, a new
+   * picture, a reset picture. The panel re-reads its own server data on this, so the sidebar
+   * matches what was just saved instead of showing the previous value until a manual reload.
+   */
+  onSettingsUpdate?: () => void;
+  /**
+   * Staff viewing a client may change that client's settings — theme, language, notifications,
+   * two-factor — which is what the client view is for. It does NOT unlock identity: their name,
+   * picture and password stay theirs, and `readOnly` still governs those.
+   */
+  canManageClient?: boolean;
 }
 
 type GmailAccountConnection = {
@@ -54,6 +66,19 @@ type DetectedCalendarAccount = {
   email: string;
   connected: boolean;
   calendars: DetectedCalendar[];
+};
+
+/**
+ * What a client has connected, as /api/client/settings reports it. Separate from the types above
+ * because those describe the signed-in user's own connections, which is a different person on a
+ * read-only page.
+ */
+type ClientConnections = {
+  google: { email: string; expiresAt: string | null; needsReconnect: boolean }[];
+  linkedin: boolean;
+  facebook: boolean;
+  googleads: boolean;
+  mailboxes: { email: string; label: string | null }[];
 };
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -121,7 +146,9 @@ type BillingSummary = {
   subscription: { cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null } | null;
 };
 
-const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null, readOnly = false, billingCompanyId = null }) => {
+const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null, readOnly = false, billingCompanyId = null, canManageClient = false, onSettingsUpdate }) => {
+  /** Whether the settings controls (not the identity ones) accept input on this page. */
+  const settingsEditable = !readOnly || (canManageClient && !!billingCompanyId);
   const [name, setName] = useState(user.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -133,6 +160,12 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     language: "en"
   });
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  /** Read-only pages only: the client's settings could not be read, so say so rather than
+   *  rendering the defaults as if they were theirs. */
+  const [settingsUnavailable, setSettingsUnavailable] = useState(false);
+  /** Read-only pages only: the CLIENT's own connections, from /api/client/settings. Kept apart
+   *  from socialConnections/gmailAccounts, which are always the session user's. */
+  const [clientConnections, setClientConnections] = useState<ClientConnections | null>(null);
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -212,27 +245,57 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   }, [userRole, billingCompanyId]);
 
   useEffect(() => {
-    if (readOnly) {
-      // Nothing to load: the cards these values feed are hidden on someone else's page.
+    /**
+     * Two sources, one shape.
+     *
+     * On your own page these come from user_preferences. On a client's page they come from that
+     * client's own row — reading your preferences there would have shown YOUR theme and
+     * notification setting under their name, which is worse than showing nothing, and is why
+     * these cards used to be hidden in readOnly instead.
+     *
+     * When a client's settings cannot be read, the cards say so. The state object holds defaults
+     * (notifications on, theme auto, English) and rendering those unlabelled would be the same
+     * lie in a quieter form — a staff member cannot tell a real setting from a placeholder.
+     */
+    const endpoint = readOnly
+      ? billingCompanyId
+        ? `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+        : null
+      : "/api/profile/getSettings";
+
+    if (!endpoint) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoadingSettings(false);
+      setSettingsUnavailable(readOnly);
       return;
     }
+
+    let cancelled = false;
     const loadSettings = async () => {
       try {
-        const response = await fetch("/api/profile/getSettings");
+        const response = await fetch(endpoint);
         if (response.ok) {
-          const settingsData = await response.json();
-          setSettings(settingsData);
+          const { connections, ...settingsData } = await response.json();
+          if (!cancelled) {
+            setSettings((prev) => ({ ...prev, ...settingsData }));
+            setClientConnections((connections as ClientConnections | undefined) ?? null);
+            setSettingsUnavailable(false);
+          }
+        } else if (!cancelled) {
+          setSettingsUnavailable(true);
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
+        if (!cancelled) setSettingsUnavailable(true);
       } finally {
-        setIsLoadingSettings(false);
+        if (!cancelled) setIsLoadingSettings(false);
       }
     };
     loadSettings();
-  }, [readOnly]);
+    return () => {
+      cancelled = true;
+    };
+  }, [readOnly, billingCompanyId]);
 
   const loadSocialConnections = async () => {
     setSocialLoading(true);
@@ -368,6 +431,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   };
 
   useEffect(() => {
+    /**
+     * Skipped entirely on someone else's page. All three read the SESSION user's connections —
+     * /api/gmail/status, /api/google-calendar/calendars and the social status routes are all
+     * scoped to whoever is logged in — so on a client's settings page they loaded the staff
+     * member's own Google accounts, calendars and LinkedIn and rendered them under the client's
+     * name. The client's own connections come from /api/client/settings instead.
+     */
+    if (readOnly) return;
     // See the note below: these are mount-only loaders that each set their own state after awaiting.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSocialConnections();
@@ -376,7 +447,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     // Mount-only on purpose. These loaders are plain functions, recreated on every render, so
     // listing them as dependencies would refetch all three on each render rather than once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [readOnly]);
 
   // Keep the role-gated sections (Gmail, calendars, social) in sync with an admin
   // changing this user's role elsewhere, without waiting on a full page reload.
@@ -479,13 +550,22 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const handleSettingsUpdate = async (newSettings: Partial<typeof settings>) => {
     setIsUpdating(true);
     setUpdateMessage(null);
-    
+
     try {
-      const response = await fetch("/api/profile/updateSettings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newSettings),
-      });
+      // A client's settings live on their own row and are written through the client route; your
+      // own live in user_preferences. Posting a client's change to the profile route would have
+      // silently changed the staff member's own settings instead.
+      const managingClient = readOnly && canManageClient && billingCompanyId;
+      const response = await fetch(
+        managingClient
+          ? `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+          : "/api/profile/updateSettings",
+        {
+          method: managingClient ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newSettings),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to update settings");
@@ -493,6 +573,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       const result = await response.json();
       setSettings(result);
+      // Tell the panel, so anything rendered from these values outside this page follows the
+      // change immediately rather than at the next full reload.
+      onSettingsUpdate?.();
       setShowSuccessModal(true);
       setUpdateMessage(null);
     } catch (error) {
@@ -529,6 +612,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           }
 
           onImageUpdate?.();
+      onSettingsUpdate?.();
           
           setShowSuccessModal(true);
           setUpdateMessage(null);
@@ -584,6 +668,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       }
 
       onImageUpdate?.();
+      onSettingsUpdate?.();
       
       setShowSuccessModal(true);
       setUpdateMessage(null);
@@ -822,8 +907,12 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
         <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="min-w-0 flex-1">
+        {/* gap-3 and no flex-1 on the details: flex-1 let the name/email block absorb all the
+            spare width in the card, which pinned the picture to the far right edge with a wide
+            empty channel between the two. They belong together as one unit, so the details take
+            their content width and the picture sits directly beside them. */}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0">
             <div className="space-y-4">
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
@@ -861,7 +950,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             )}
           </div>
-          <div className="relative shrink-0" ref={avatarMenuRef}>
+          {/* mx-auto, so the leftover width in the row splits evenly either side of the picture
+              and it lands halfway between the details and the card edge. flex-1 on the details
+              put it hard right; nothing at all put it hard against the text. */}
+          <div className="relative shrink-0 mx-auto" ref={avatarMenuRef}>
             <div className="relative inline-block">
               <ProfileImage
                 src={user.image}
@@ -928,8 +1020,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       </div>
 
-      
-        {!readOnly && (
+
+        {/* Shown on a client's page too, not just your own. Every control inside is already
+            disabled under readOnly, so a staff member reads the client's settings without being
+            able to change them — which is what the page was for. Hiding the whole card instead
+            left Settings with a single Profile box and looked broken. */}
         <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
@@ -938,6 +1033,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Security</h3>
           </div>
 
+          {settingsUnavailable ? (
+            <p className={`text-[13px] ${textSecondary}`}>
+              This client&rsquo;s settings could not be loaded.
+            </p>
+          ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -947,7 +1047,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               <Toggle
                 checked={settings.emailNotifications}
                 onChange={(v) => handleSettingsUpdate({ emailNotifications: v })}
-                disabled={readOnly || isUpdating || isLoadingSettings}
+                disabled={!settingsEditable || isUpdating || isLoadingSettings}
               />
             </div>
             <div className="flex items-center justify-between gap-4">
@@ -976,11 +1076,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
             )}
           </div>
+          )}
         </div>
-        )}
 
-        
-        {!readOnly && (
         <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
@@ -989,6 +1087,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Preferences</h3>
           </div>
 
+          {settingsUnavailable ? (
+            <p className={`text-[13px] ${textSecondary}`}>
+              This client&rsquo;s settings could not be loaded.
+            </p>
+          ) : (
           <div className="space-y-4">
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Theme</label>
@@ -996,7 +1099,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
                 value={settings.theme}
                 onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
-                disabled={readOnly || isUpdating || isLoadingSettings}
+                disabled={!settingsEditable || isUpdating || isLoadingSettings}
               >
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
@@ -1010,7 +1113,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
                 value={settings.language}
                 onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
-                disabled={readOnly || isUpdating || isLoadingSettings}
+                disabled={!settingsEditable || isUpdating || isLoadingSettings}
               >
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
@@ -1026,8 +1129,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </span>
             </div>
           </div>
+          )}
         </div>
-        )}
       </div>
 
       {userRole === "user" && (
@@ -1087,20 +1190,126 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 </div>
 
                 {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => void openBillingPortal()}
-                  disabled={openingPortal}
-                  className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {openingPortal ? "Opening…" : "Manage Payment Method"}
-                </button>
+                <div className="space-y-1.5">
+                  {/* The portal covers the billing details as well as the card now, so the label
+                      no longer promises only one of the two. */}
+                  <button
+                    type="button"
+                    onClick={() => void openBillingPortal()}
+                    disabled={openingPortal}
+                    className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {openingPortal ? "Opening…" : "Manage Billing"}
+                  </button>
+                  <p className={`text-[12px] ${textSecondary}`}>
+                    Update your card, billing address, company name, billing email or tax ID on
+                    Stripe&rsquo;s secure pages.
+                  </p>
+                </div>
                 )}
                 {billingPortalError && <p className="text-[13px] text-[#B42318]">{billingPortalError}</p>}
               </div>
             )}
           </div>
 
+          {readOnly ? (
+            /* The client's own connections. The Social Connections card below reads the signed-in
+               user's status routes, which on this page is the staff member looking at it — their
+               accounts under someone else's name. This card is fed by /api/client/settings, which
+               is scoped to the client. */
+            /* Same SettingsCard chrome, heading and account rows as the Google Accounts card on
+               your own settings page, so the two read as one design rather than two. What differs
+               is only what a staff member may do: no "Add account", no Reconnect, no Remove —
+               those are OAuth grants only the account holder can make. */
+            <SettingsCard
+              title="Google Accounts"
+              icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
+              description="Connected Google accounts, mailboxes and platforms for this client."
+              cardClass={`rounded-2xl ${cardBg} border p-5`}
+              titleClass={textPrimary}
+              descriptionClass={textSecondary}
+            >
+              {!clientConnections ? (
+                <p className={`text-[13px] ${textSecondary}`}>
+                  This client&rsquo;s connections could not be loaded.
+                </p>
+              ) : (
+                <div className="space-y-5">
+                  {clientConnections.google.length === 0 ? (
+                    <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
+                  ) : (
+                    <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
+                      {/* One Google grant covers Gmail and Calendar both — the calendar routes
+                          read the same token — so this is one row, not two connections. */}
+                      {clientConnections.google.map((account) => (
+                        <div key={account.email} className="py-3.5 first:pt-0 last:pb-0">
+                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span className={`truncate text-[13px] font-medium ${textPrimary}`}>
+                                {account.email}
+                              </span>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                  account.needsReconnect
+                                    ? "bg-[#FDF3E2] text-[#8A5A00]"
+                                    : "bg-[#E7F7EE] text-[#11734B]"
+                                }`}
+                              >
+                                {account.needsReconnect ? "Needs reconnect" : "Connected"}
+                              </span>
+                            </div>
+                            <span className={`shrink-0 text-[12px] ${textSecondary}`}>
+                              Gmail and Calendar
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div>
+                    <p className={`mb-1.5 text-[11px] font-medium ${textSecondary}`}>
+                      Workspace Mailboxes
+                    </p>
+                    {clientConnections.mailboxes.length === 0 ? (
+                      <p className={`text-[13px] ${textSecondary}`}>No mailbox attached.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {clientConnections.mailboxes.map((mailbox) => (
+                          <li key={mailbox.email} className={`text-[13px] ${textPrimary}`}>
+                            {mailbox.email}
+                            {mailbox.label ? <span className={textSecondary}> · {mailbox.label}</span> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className={`mb-1.5 text-[11px] font-medium ${textSecondary}`}>Other Platforms</p>
+                    <ul className="space-y-1">
+                      {([
+                        ["LinkedIn", clientConnections.linkedin],
+                        ["Facebook", clientConnections.facebook],
+                        ["Google Ads", clientConnections.googleads],
+                      ] as const).map(([label, connected]) => (
+                        <li key={label} className={`flex items-center justify-between text-[13px] ${textPrimary}`}>
+                          <span>{label}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#F3F1F8] text-[#5B5468]"
+                            }`}
+                          >
+                            {connected ? "Connected" : "Not connected"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </SettingsCard>
+          ) : (
           <div className={`rounded-2xl ${cardBg} border p-5`}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
@@ -1196,6 +1405,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               ))}
             </div>
           </div>
+          )}
 
         </>
       )}
@@ -1261,8 +1471,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                               "_self"
                             )
                           }
-                          className={`h-8 rounded-lg px-3 text-[12.5px] font-medium transition-colors ${
-                            isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"
+                          /* Outlined and inline-flex: as bare text on a bare background it read as
+                             a label rather than a control, and without the flex centring its text
+                             sat on its own baseline instead of on the trash icon's centre line.
+                             Both are h-8 now and share one border treatment. */
+                          className={`inline-flex h-8 items-center rounded-lg border px-3 text-[12.5px] font-medium transition-colors ${
+                            isDark
+                              ? "border-white/25 text-white hover:border-white/40 hover:bg-white/10"
+                              : "border-[#D8D2E4] text-[#374151] hover:border-[#701CC0]/45 hover:bg-[#F5F3F9]"
                           }`}
                         >
                           Reconnect
@@ -1270,7 +1486,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                         <button
                           type="button"
                           onClick={() => openDeleteGmailModal(account.email)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-red-50 hover:text-red-600"
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                            isDark
+                              ? "border-white/25 text-white/70 hover:border-red-400/60 hover:bg-red-500/10 hover:text-red-300"
+                              : "border-[#D8D2E4] text-[#9CA3AF] hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                          }`}
                           aria-label={`Remove Gmail account ${account.email}`}
                           title="Remove account"
                         >

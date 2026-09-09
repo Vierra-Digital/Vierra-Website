@@ -203,11 +203,15 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   // declaration, and the compiler flagged it as one.
   async function fetchCurrentUser() {
     try {
-      const response = await fetch("/api/profile/getUser")
+      // no-store: after saving a picture the browser answered this from cache, so the version
+      // came back unchanged and the sidebar kept showing the old one.
+      const response = await fetch("/api/profile/getUser", { cache: "no-store" })
       if (response.ok) {
         const userData = await response.json()
         setCurrentUserName(userData.name)
-        if (userData.imageVersion) setImageVersion(userData.imageVersion)
+        // Not `if (userData.imageVersion)`: resetting to the default returns no version, and
+        // skipping the update there left the removed picture on screen until a reload.
+        setImageVersion(userData.imageVersion ?? 0)
       }
     } catch (error) {
       console.error("Failed to fetch current user:", error)
@@ -369,12 +373,18 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
         <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#6B1BC4] border-r border-white/[0.09] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[224px]" : "w-0"} md:w-[224px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full shrink-0 flex items-center justify-center px-4 pt-7 pb-6">
             <Link href="/">
+              {/* priority, because this is the one image on the panel that is above the fold on
+                  every route. Without it next/image marks the tag loading="lazy" and emits no
+                  preload, so the browser only discovers it after hydration — the sidebar, its nav
+                  and the section all painted while the logo was still a gap, and it popped in
+                  last. Eager + a preload link puts it in the same paint as the rest. */}
               <Image
                 src="/assets/vierra-logo-panel.png"
                 alt="Vierra Go Home"
                 width={152}
                 height={56}
                 className="w-[108px] h-auto"
+                priority
               />
             </Link>
           </div>
@@ -581,13 +591,12 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 }}
                 userRole={resolvedUserRole}
                 onNameUpdate={setCurrentUserName}
-                onImageUpdate={async () => {
-                  const r = await fetch("/api/profile/getUser")
-                  if (r.ok) {
-                    const d = await r.json()
-                    if (d.imageVersion) setImageVersion(d.imageVersion)
-                  }
-                }}
+                /* Both go through fetchCurrentUser, which sets the very state the sidebar renders
+                   from. Re-running getServerSideProps would not do it: currentUserName and
+                   imageVersion are seeded from props by useState once, so fresh props after a
+                   navigation are never read again. */
+                onImageUpdate={() => void fetchCurrentUser()}
+                onSettingsUpdate={() => void fetchCurrentUser()}
                 onClose={() => setShowSettings(false)}
                 variant="panel"
               />
@@ -610,12 +619,15 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {viewModeSection === 6 && (
                         <ClientBillingSection companyId={viewClient?.companyId ?? null} />
                       )}
-                      {/* The client's own settings page, to look at. readOnly hides every control
-                          that would change their account — a staff member must not rename them,
-                          replace their picture or set their password from here. */}
+                      {/* The client's own settings page. canManageClient lets a staff member
+                          change the client's settings — theme, language, notifications, two-factor
+                          — which is what the client view is for. readOnly still holds identity
+                          shut: nobody renames a client, replaces their picture or sets their
+                          password from here. */}
                       {viewModeSection === 7 && (
                         <UserSettingsPage
                           readOnly
+                          canManageClient
                           variant="panel"
                           userRole="user"
                           billingCompanyId={viewClient?.companyId ?? null}
