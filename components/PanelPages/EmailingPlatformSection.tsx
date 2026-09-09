@@ -5459,7 +5459,11 @@ ${sourceText}`;
                                   /* Row = fixed gutter · sender · subject+snippet · time.
                                      Colors are explicit here (not inherited from a global remap)
                                      so read/unread hierarchy is legible on the dark surface. */
-                                  className={`email-row group grid w-full grid-cols-[auto_minmax(0,13rem)_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2.5 text-left transition-colors ${
+                                  /* py-3.5, not py-2.5: this whole row is the target for opening a
+                                     message, and at 10px of padding it was a ~40px band that took
+                                     aim to hit. 14px puts it near 48px, the usual comfortable
+                                     target, without turning the list into a sparse one. */
+                                  className={`email-row group grid w-full grid-cols-[auto_minmax(0,13rem)_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-3.5 text-left transition-colors ${
                                     isSelected ? "is-selected" : ""
                                   } ${message.unread ? "is-unread" : ""}`}
                                 >
@@ -5471,7 +5475,9 @@ ${sourceText}`;
                                       checked={selectedRows.includes(key)}
                                       onClick={(event) => event.stopPropagation()}
                                       onChange={() => toggleRowSelection(message)}
-                                      className="email-check h-4 w-4 shrink-0"
+                                      /* 18px rather than 16: the tick is transform-centred, so the
+                                         box can grow without the mark drifting off centre. */
+                                      className="email-check h-[18px] w-[18px] shrink-0"
                                     />
                                     <span
                                       role="button"
