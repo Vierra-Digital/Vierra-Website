@@ -16,6 +16,8 @@ import {
     PanelThead,
     PanelTr,
 } from "@/components/panel/PanelTable"
+import { billingRows, hasBillingDetails, type BillingDetails } from "@/lib/billing/billingDetails"
+import { summariseBilling } from "@/lib/billing/summary"
 
 type PaymentMethod = {
     id: string
@@ -60,6 +62,7 @@ type Payment = {
 type Billing = {
     connected: boolean
     clientName?: string | null
+    billingDetails?: BillingDetails | null
     retainerCents: number | null
     paymentMethods: PaymentMethod[]
     subscription: {
@@ -172,15 +175,11 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
         }
     }
 
-    // Drafts carry no amount anyone owes yet, and a void invoice is not owed either — counting
-    // either as outstanding overstates the balance.
-    const paidTotal = data ? data.invoices.reduce((sum, i) => sum + i.amountPaidCents, 0) : 0
-    const outstanding = data
-        ? data.invoices
-              .filter((i) => i.status === "open" || i.status === "uncollectible")
-              .reduce((sum, i) => sum + i.amountDueCents, 0)
-        : 0
-    const openInvoices = data ? data.invoices.filter((i) => i.status === "open").length : 0
+    // See lib/billing/summary for which Stripe rows each figure counts, and why.
+    const { paidCents, refundedCents, outstandingCents, openInvoiceCount } = summariseBilling(
+        data?.invoices ?? [],
+        data?.payments ?? []
+    )
 
     return (
         <div className={inter.className}>
@@ -219,14 +218,20 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                         {portalError && <p role="alert" className="mb-4 text-[13px] text-[#B42318]">{portalError}</p>}
 
                         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                            <PanelStat label="Paid To Date" value={money(paidTotal)} />
+                            <PanelStat
+                                label="Paid To Date"
+                                value={money(paidCents)}
+                                // Named when there is one, so the figure reconciles with the
+                                // Payments table below rather than looking short by that amount.
+                                hint={refundedCents > 0 ? `After ${money(refundedCents)} refunded` : undefined}
+                            />
                             <PanelStat
                                 label="Outstanding"
-                                value={money(outstanding)}
+                                value={money(outstandingCents)}
                                 hint={
-                                    outstanding === 0
+                                    outstandingCents === 0
                                         ? "Nothing due"
-                                        : `${openInvoices} invoice${openInvoices === 1 ? "" : "s"} to pay`
+                                        : `${openInvoiceCount} invoice${openInvoiceCount === 1 ? "" : "s"} to pay`
                                 }
                             />
                             <PanelStat
@@ -341,6 +346,48 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                 </div>
                             </PanelCard>
                         </div>
+
+                        {/* Who the invoices are billed to. Stripe holds this and the portal edits
+                            it, but until now the panel showed only what had been charged, never
+                            the name and address it was charged to — so there was no way to check
+                            a detail before or after a client changed it. */}
+                        <PanelCard>
+                            <div className="flex items-center justify-between gap-3 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
+                                <h3 className="text-[13px] font-semibold text-[#111827]">Billing Information</h3>
+                                {canManage && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void openPortal()}
+                                        disabled={openingPortal}
+                                        className="rounded text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5] disabled:opacity-50"
+                                    >
+                                        {openingPortal ? "Opening…" : "Edit in Stripe"}
+                                    </button>
+                                )}
+                            </div>
+                            <div className="p-4">
+                                {!hasBillingDetails(data.billingDetails) ? (
+                                    <p className="text-[13px] text-[#6B7280]">
+                                        No billing details on file. They are captured at the first payment, or can be
+                                        set in Stripe.
+                                    </p>
+                                ) : (
+                                    /* A definition list on a fixed label column, so the values line
+                                       up with each other rather than each starting wherever its own
+                                       label happened to end. */
+                                    <dl className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
+                                        {/* Index-keyed: the address continuation rows deliberately
+                                            share an empty label, so the label is not unique. */}
+                                        {billingRows(data.billingDetails!).map(([label, value], i) => (
+                                            <React.Fragment key={`${label}-${i}`}>
+                                                <dt className="text-[#6B7280]">{label}</dt>
+                                                <dd className="min-w-0 break-words text-[#111827]">{value}</dd>
+                                            </React.Fragment>
+                                        ))}
+                                    </dl>
+                                )}
+                            </div>
+                        </PanelCard>
 
                         <PanelCard>
                             <div className="border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">

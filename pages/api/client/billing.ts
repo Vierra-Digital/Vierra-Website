@@ -93,9 +93,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       subscription?.items?.data?.[0]?.current_period_end ??
       null;
 
+    /**
+     * The billing details Stripe holds for this customer.
+     *
+     * The customer object was already being fetched for its default payment method, and none of
+     * this was passed on — so the panel could show what had been *charged* but never who it was
+     * billed to or where. That is the half a client edits in the portal, and there was no way to
+     * see the current value before or after changing it.
+     */
+    const live = "deleted" in customer && customer.deleted ? null : customer;
+    const address = live?.address ?? null;
+    const billingDetails = {
+      name: live?.name ?? null,
+      email: live?.email ?? null,
+      phone: live?.phone ?? null,
+      address: address
+        ? {
+            line1: address.line1 ?? null,
+            line2: address.line2 ?? null,
+            city: address.city ?? null,
+            state: address.state ?? null,
+            postalCode: address.postal_code ?? null,
+            country: address.country ?? null,
+          }
+        : null,
+    };
+
     return res.status(200).json({
       connected: true,
       clientName: client?.name ?? null,
+      billingDetails,
       retainerCents: billing?.monthly_retainer_cents ?? null,
       paymentMethods: methods.data.map((method) => ({
         id: method.id,
