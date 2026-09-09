@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { fetchPostmasterStats, type PostmasterResult } from "@/lib/email/postmaster";
+import { isConsumerDomain } from "@/lib/email/mailboxHealth";
 import { mapInBatches } from "@/lib/batch";
 
 /**
@@ -21,7 +22,7 @@ export default withAuth(async (req, res, session) => {
   for (const { account_email } of accounts) {
     const domain = (account_email.split("@")[1] || "").trim().toLowerCase();
     // Free consumer domains are never verifiable in Postmaster Tools — skip rather than show an error.
-    if (!domain || /^(gmail|googlemail|outlook|hotmail|yahoo|icloud|aol)\./.test(`${domain}.`)) continue;
+    if (!domain || isConsumerDomain(domain)) continue;
     if (!byDomain.has(domain)) byDomain.set(domain, account_email);
   }
 

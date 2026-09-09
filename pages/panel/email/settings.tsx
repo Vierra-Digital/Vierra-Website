@@ -30,7 +30,6 @@ import {
   FiMapPin,
   FiServer,
   FiSearch,
-  FiShield,
   FiSlash,
   FiTag,
   FiUsers,
@@ -272,8 +271,7 @@ const SETTINGS_NAV: { group: string; items: string[] }[] = [
     items: [
       "Inboxes",
       "Confidential messages",
-      "Deliverability",
-      "Gmail reputation (Postmaster)",
+      "Sending health",
       "Campaign sending (CAN-SPAM)",
       "Meeting booking",
       "Shared inboxes",
@@ -357,44 +355,41 @@ function SettingsNav({ filter }: { filter: string }) {
 
 const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [settingsFilter, setSettingsFilter] = useState("");
-  /** Postmaster reputation per sending domain. Entries self-describe when unavailable. */
-  type PostmasterRow = {
+  /**
+   * Per-mailbox sending health: domain auth (SPF/DKIM/DMARC), Postmaster reputation, and bounce
+   * rate, from the one consolidated `/api/email/accounts/[id]/health` endpoint — replaces what
+   * used to be two separately-fetched Settings sections (Deliverability, Gmail reputation) plus
+   * no bounce-rate visibility at all.
+   */
+  type MailboxHealth = {
     domain: string;
-    ok: boolean;
-    reason?: string;
-    message?: string;
-    stats?: { date: string; userReportedSpamRatio: number | null; domainReputation: string | null };
+    spf: { status: "pass" | "warn" | "fail"; detail: string } | null;
+    dkim: { status: "pass" | "warn" | "fail"; detail: string } | null;
+    dmarc: { status: "pass" | "warn" | "fail"; detail: string; policy: string | null } | null;
+    postmaster:
+      | { ok: true; stats: { date: string; userReportedSpamRatio: number | null; domainReputation: string | null } }
+      | { ok: false; reason?: string; message: string }
+      | null;
+    bounce: { sent: number; bounces: number; rate: number | null };
   };
-  const [postmaster, setPostmaster] = useState<PostmasterRow[]>([]);
-  const [postmasterLoading, setPostmasterLoading] = useState(true);
+  const [mailboxHealth, setMailboxHealth] = useState<Record<string, MailboxHealth>>({});
+  const [mailboxHealthLoading, setMailboxHealthLoading] = useState<Record<string, boolean>>({});
 
-  const loadPostmaster = useCallback(async () => {
-    setPostmasterLoading(true);
+  const loadMailboxHealth = useCallback(async (accountId: string) => {
+    setMailboxHealthLoading((prev) => ({ ...prev, [accountId]: true }));
     try {
-      const res = await fetch("/api/email/postmaster", { cache: "no-store" });
-      const payload = await res.json().catch(() => ({}));
-      const rows = Array.isArray(payload?.domains) ? payload.domains : [];
-      setPostmaster(
-        rows.map((r: Record<string, unknown>) => ({
-          domain: String(r.domain ?? (r.stats as { domain?: string } | undefined)?.domain ?? ""),
-          ok: Boolean(r.ok),
-          reason: typeof r.reason === "string" ? r.reason : undefined,
-          message: typeof r.message === "string" ? r.message : undefined,
-          stats: r.stats as PostmasterRow["stats"],
-        }))
-      );
+      const res = await fetch(`/api/email/accounts/${encodeURIComponent(accountId)}/health`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setMailboxHealth((prev) => ({ ...prev, [accountId]: data }));
+      }
     } catch {
-      setPostmaster([]);
+      /* leave any previous entry in place */
     } finally {
-      setPostmasterLoading(false);
+      setMailboxHealthLoading((prev) => ({ ...prev, [accountId]: false }));
     }
   }, []);
 
-  useEffect(() => {
-    // Loading the Postmaster Tools status on mount; the loader flips its own loading state after awaiting.
-     
-    void loadPostmaster();
-  }, [loadPostmaster]);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [signatures, setSignatures] = useState<SignatureRow[]>([]);
@@ -478,14 +473,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
    * switch moved, and a save that never happened looked identical to one that did.
    */
   const [actionError, setActionError] = useState("");
-  type DeliverabilityResult = {
-    domain: string;
-    googleManaged: boolean;
-    spf: { found: boolean };
-    dmarc: { found: boolean; policy: string };
-    dkim: { found: boolean };
-  };
-  const [deliverability, setDeliverability] = useState<Record<string, DeliverabilityResult>>({});
   type BookingLinkRow = {
     id: string;
     slug: string;
@@ -1262,28 +1249,17 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
-  // Domain-auth health (SPF/DKIM/DMARC) for each connected account's sending domain.
-  // `requestedDomainsRef` (not the `deliverability` state) is the de-dupe key: keying off
-  // state meant every resolved domain re-ran this effect for all the others.
-  const requestedDomainsRef = useRef<Set<string>>(new Set());
+  // Sending health (SPF/DKIM/DMARC + Postmaster + bounce rate) per mailbox. Keyed by account id
+  // (not domain) since `requestedAccountIdsRef` is the de-dupe key — keying off `mailboxHealth`
+  // state meant every resolved account re-ran this effect for all the others.
+  const requestedAccountIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const domains = Array.from(
-      new Set(connectedAccounts.map((a) => a.email.split("@")[1]).filter(Boolean))
-    );
-    domains.forEach(async (domain) => {
-      if (requestedDomainsRef.current.has(domain)) return;
-      requestedDomainsRef.current.add(domain);
-      try {
-        const res = await fetch(`/api/gmail/deliverability?domain=${encodeURIComponent(domain)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setDeliverability((prev) => ({ ...prev, [domain]: data }));
-        }
-      } catch {
-        /* ignore */
-      }
+    providerAccounts.forEach((account) => {
+      if (requestedAccountIdsRef.current.has(account.id)) return;
+      requestedAccountIdsRef.current.add(account.id);
+      void loadMailboxHealth(account.id);
     });
-  }, [connectedAccounts]);
+  }, [providerAccounts, loadMailboxHealth]);
 
   /**
    * Make one mailbox the main inbox.
@@ -2261,134 +2237,133 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               </SettingsSection>
 
               <SettingsSection
-                title="Deliverability"
-                description="Domain authentication (SPF, DKIM, DMARC) for your sending domains — gaps hurt inbox placement."
+                title="Sending health"
+                description="Domain authentication (SPF/DKIM/DMARC), Gmail-observed reputation, and bounce rate for each mailbox — gaps in any of these hurt inbox placement."
                 icon={FiActivity}
               >
-                {connectedAccounts.length === 0 ? (
-                  <p className={TEXT_MUTED}>No connected accounts.</p>
+                {providerAccounts.length === 0 ? (
+                  <p className={TEXT_MUTED}>No mailboxes configured yet — add one below.</p>
                 ) : (
                   <ul className="space-y-2">
-                    {connectedAccounts.map((account) => {
-                      const domain = account.email.split("@")[1] || "";
-                      const d = deliverability[domain];
-                      const badge = (label: string, ok: boolean) => (
+                    {providerAccounts.map((account) => {
+                      const health = mailboxHealth[account.id];
+                      const loading = mailboxHealthLoading[account.id];
+                      const badge = (label: string, status: "pass" | "warn" | "fail" | undefined, detail?: string) => (
                         <span
+                          title={detail}
                           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                            ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+                            status === "pass"
+                              ? "bg-green-50 text-green-700"
+                              : status === "warn"
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-red-50 text-red-600"
                           }`}
                         >
-                          {label} {ok ? "✓" : "✗"}
+                          {label} {status === "pass" ? "✓" : status === "warn" ? "!" : "✗"}
                         </span>
                       );
+                      const bounce = health?.bounce;
+                      const bouncePct = bounce?.rate === null || bounce?.rate === undefined ? null : bounce.rate * 100;
+                      const bounceLevel = bouncePct === null ? null : bouncePct > 2 ? "bad" : bouncePct > 0.5 ? "warn" : "good";
                       return (
-                        <li key={account.email} className="rounded-xl border border-[#ECEAF1] bg-white p-3">
+                        <li key={account.id} className="rounded-xl border border-[#ECEAF1] bg-white p-3">
                           <div className="flex items-center justify-between gap-3">
-                            <span className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</span>
-                            {d?.googleManaged ? (
-                              <span className="shrink-0 text-xs text-[#6B7280]">Managed by Google</span>
-                            ) : null}
+                            <span className="truncate text-sm font-medium text-[#1E1B2E]">{account.accountEmail}</span>
                           </div>
-                          {d ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {badge("SPF", d.spf.found)}
-                              {badge("DKIM", d.dkim.found)}
-                              {badge(`DMARC${d.dmarc.policy ? ` (${d.dmarc.policy})` : ""}`, d.dmarc.found)}
-                            </div>
+                          {!health ? (
+                            <p className="mt-2 text-xs text-[#9A93AE]">{loading === false ? "Health check unavailable." : "Checking…"}</p>
                           ) : (
-                            <p className="mt-2 text-xs text-[#9A93AE]">Checking {domain}…</p>
+                            <>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {badge("SPF", health.spf?.status, health.spf?.detail)}
+                                {badge("DKIM", health.dkim?.status, health.dkim?.detail)}
+                                {badge(
+                                  `DMARC${health.dmarc?.policy ? ` (${health.dmarc.policy})` : ""}`,
+                                  health.dmarc?.status,
+                                  health.dmarc?.detail
+                                )}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B7280]">
+                                <span>
+                                  Bounce rate:{" "}
+                                  <b
+                                    className={
+                                      bounceLevel === "bad"
+                                        ? "text-red-600"
+                                        : bounceLevel === "warn"
+                                          ? "text-amber-700"
+                                          : bounceLevel === "good"
+                                            ? "text-green-700"
+                                            : "text-[#1E1B2E]"
+                                    }
+                                  >
+                                    {bouncePct === null ? "No sends yet" : `${bouncePct.toFixed(2)}%`}
+                                  </b>
+                                  {bounce && bounce.sent > 0 ? ` (${bounce.bounces}/${bounce.sent} sent)` : ""}
+                                </span>
+                                {health.postmaster?.ok ? (
+                                  <>
+                                    <span>
+                                      Spam:{" "}
+                                      <b className="text-[#1E1B2E]">
+                                        {health.postmaster.stats.userReportedSpamRatio === null
+                                          ? "—"
+                                          : `${(health.postmaster.stats.userReportedSpamRatio * 100).toFixed(3)}%`}
+                                      </b>
+                                    </span>
+                                    <span>
+                                      Reputation: <b className="text-[#1E1B2E]">{health.postmaster.stats.domainReputation ?? "—"}</b>
+                                    </span>
+                                  </>
+                                ) : health.postmaster ? (
+                                  <span className="text-[#9A93AE]">{health.postmaster.message}</span>
+                                ) : null}
+                              </div>
+                            </>
                           )}
                         </li>
                       );
                     })}
                   </ul>
                 )}
-              </SettingsSection>
 
-              <SettingsSection
-                title="Gmail reputation (Postmaster)"
-                description="Spam-complaint rate and the SPF/DKIM/DMARC pass rates Gmail actually observed. A 'Report spam' click is reported to Google, not to us, so this is the only real source for complaint data."
-                icon={FiShield}
-              >
-                <div className="space-y-3">
-                  {postmasterLoading ? (
-                    <p className={TEXT_MUTED}>Checking Postmaster…</p>
-                  ) : postmaster.length === 0 ? (
-                    <p className={TEXT_MUTED}>
-                      No custom sending domains connected. Postmaster only covers domains you own — consumer
-                      domains (gmail.com, outlook.com…) can never be verified.
-                    </p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {postmaster.map((entry) => (
-                        <li key={entry.domain} className="rounded-xl border border-[#ECEAF1] bg-white p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className={`truncate ${TEXT_STRONG}`}>{entry.domain}</span>
-                            {entry.ok ? (
-                              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
-                                Connected
-                              </span>
-                            ) : (
-                              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                {entry.reason === "no_permission" ? "Needs reconnect" : "No data yet"}
-                              </span>
-                            )}
-                          </div>
-                          {entry.ok && entry.stats ? (
-                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B7280]">
-                              <span>
-                                Spam:{" "}
-                                <b className="text-[#1E1B2E]">
-                                  {entry.stats.userReportedSpamRatio === null
-                                    ? "—"
-                                    : `${(entry.stats.userReportedSpamRatio * 100).toFixed(3)}%`}
-                                </b>
-                              </span>
-                              <span>
-                                Reputation: <b className="text-[#1E1B2E]">{entry.stats.domainReputation ?? "—"}</b>
-                              </span>
-                              <span>as of {entry.stats.date}</span>
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-xs text-[#9A93AE]">{entry.message}</p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <div className="rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
-                    <p className="text-xs text-[#6B7280]">
-                      Reputation data needs two one-time steps: the connected Google account must grant Postmaster
-                      access (reconnect below — existing logins don&apos;t carry new permissions), and each sending
-                      domain must be verified at{" "}
-                      <a
-                        href="https://postmaster.google.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-[#701CC0] underline"
-                      >
-                        postmaster.google.com
-                      </a>
-                      . Google publishes with a 1–2 day lag and only above a daily volume threshold.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const target = activeAccountEmail
-                            ? `/api/gmail/initiate?from=email-settings&account=${encodeURIComponent(activeAccountEmail)}`
-                            : "/api/gmail/initiate?from=email-settings";
-                          window.open(target, "_self");
-                        }}
-                        className={btnPrimary}
-                      >
-                        Reconnect Google for Postmaster
-                      </button>
-                      <button type="button" onClick={loadPostmaster} disabled={postmasterLoading} className={btnSecondary}>
-                        {postmasterLoading ? "Checking…" : "Re-check now"}
-                      </button>
-                    </div>
+                <div className="mt-3 rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                  <p className="text-xs text-[#6B7280]">
+                    Postmaster reputation needs two one-time steps: the connected Google account must grant Postmaster
+                    access (reconnect below — existing logins don&apos;t carry new permissions), and each sending
+                    domain must be verified at{" "}
+                    <a
+                      href="https://postmaster.google.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[#701CC0] underline"
+                    >
+                      postmaster.google.com
+                    </a>
+                    . Consumer domains (gmail.com, outlook.com…) can never be verified. Google publishes with a 1–2
+                    day lag and only above a daily volume threshold.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = activeAccountEmail
+                          ? `/api/gmail/initiate?from=email-settings&account=${encodeURIComponent(activeAccountEmail)}`
+                          : "/api/gmail/initiate?from=email-settings";
+                        window.open(target, "_self");
+                      }}
+                      className={btnPrimary}
+                    >
+                      Reconnect Google for Postmaster
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => providerAccounts.forEach((account) => void loadMailboxHealth(account.id))}
+                      disabled={providerAccounts.some((account) => mailboxHealthLoading[account.id])}
+                      className={btnSecondary}
+                    >
+                      {providerAccounts.some((account) => mailboxHealthLoading[account.id]) ? "Checking…" : "Re-check now"}
+                    </button>
                   </div>
                 </div>
               </SettingsSection>
