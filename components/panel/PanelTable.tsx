@@ -191,8 +191,13 @@ export const PanelStat: React.FC<{
   </div>
 )
 
-export const PanelCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">{children}</div>
+export const PanelCard: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className = "",
+}) => (
+  <div className={`overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white ${className}`}>
+    {children}
+  </div>
 )
 
 export const PanelTable: React.FC<{ children: React.ReactNode }> = ({ children }) => (

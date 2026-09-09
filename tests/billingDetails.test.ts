@@ -49,7 +49,7 @@ describe("billingRows", () => {
   it("prints the full set in invoice order", () => {
     expect(billingRows(full)).toEqual([
       ["Billed to", "Iron & Water Co."],
-      ["Email", "billing@ironandwater.test"],
+      ["Billing Email", "billing@ironandwater.test"],
       ["Phone", "+1 617 555 0142"],
       ["Address", "3 Ashland Street"],
       ["", "Suite 200"],

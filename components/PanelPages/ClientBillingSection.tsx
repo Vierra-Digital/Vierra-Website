@@ -104,6 +104,23 @@ const PAYMENT_TONES: Record<string, "positive" | "warning" | "danger"> = {
     failed: "danger",
 }
 
+/**
+ * What an invoice line is called on the page.
+ *
+ * Stripe names the first invoice of a subscription "Subscription creation", which is its own
+ * internal wording for the event and means nothing to the client reading their invoice. Anything
+ * Stripe generated itself is replaced with the name of the thing actually being billed; a line a
+ * human wrote is left exactly as written.
+ */
+const GENERATED_LINES = new Set(["subscription creation", "subscription update", "subscription"])
+const DEFAULT_LINE = "Vierra Lead Generation Retainer"
+
+const describeLine = (description: string | null) => {
+    const trimmed = (description ?? "").trim()
+    if (!trimmed || GENERATED_LINES.has(trimmed.toLowerCase())) return DEFAULT_LINE
+    return trimmed
+}
+
 /** "visa" reads as "Visa"; a bank account says which bank rather than which brand. */
 const describeMethod = (method: PaymentMethod) => {
     if (method.type === "card") {
@@ -230,14 +247,14 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                 value={money(outstandingCents)}
                                 hint={
                                     outstandingCents === 0
-                                        ? "Nothing due"
+                                        ? "Nothing Due"
                                         : `${openInvoiceCount} invoice${openInvoiceCount === 1 ? "" : "s"} to pay`
                                 }
                             />
                             <PanelStat
                                 label="Retainer"
                                 value={data.retainerCents === null ? "—" : money(data.retainerCents)}
-                                hint={data.subscription?.interval ? `Per ${data.subscription.interval}` : undefined}
+                                hint={data.subscription?.interval ? `Per ${titleCase(data.subscription.interval)}` : undefined}
                             />
                             <PanelStat
                                 label="Renews"
@@ -252,106 +269,19 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                     data.subscription
                                         ? data.subscription.cancelAtPeriodEnd
                                             ? `Ends ${date(data.subscription.currentPeriodEnd)}`
-                                            : "Automatic renewal on"
+                                            : "Automatic Renewal On"
                                         : "No subscription"
                                 }
                             />
                         </div>
 
-                        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            <PanelCard>
-                                <div className="border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
-                                    <h3 className="text-[13px] font-semibold text-[#111827]">Subscription</h3>
-                                </div>
-                                <div className="p-4">
-                                    {!data.subscription ? (
-                                        <p className="text-[13px] text-[#6B7280]">
-                                            No subscription. Invoices are raised manually.
-                                        </p>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                                                <PanelBadge
-                                                    tone={data.subscription.status === "active" ? "positive" : "warning"}
-                                                >
-                                                    {titleCase(data.subscription.status)}
-                                                </PanelBadge>
-                                                {data.subscription.amountCents !== null && (
-                                                    <span className="text-[#111827]">
-                                                        {money(data.subscription.amountCents)}
-                                                        {data.subscription.interval ? ` / ${data.subscription.interval}` : ""}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-[13px] text-[#6B7280]">
-                                                {data.subscription.cancelAtPeriodEnd
-                                                    ? `Automatic renewal is off. Access ends ${date(data.subscription.currentPeriodEnd)}.`
-                                                    : `Renews automatically on ${date(data.subscription.currentPeriodEnd)}.`}
-                                            </p>
-                                            {canManage && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void setAutoRenew(data.subscription!.cancelAtPeriodEnd)}
-                                                    disabled={renewalBusy}
-                                                    className="h-8 rounded-lg bg-[#F4F2F8] px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-50"
-                                                >
-                                                    {renewalBusy
-                                                        ? "Updating…"
-                                                        : data.subscription.cancelAtPeriodEnd
-                                                          ? "Turn Renewal On"
-                                                          : "Turn Renewal Off"}
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </PanelCard>
-
-                            <PanelCard>
-                                <div className="flex items-center justify-between gap-3 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
-                                    <h3 className="text-[13px] font-semibold text-[#111827]">Payment Methods</h3>
-                                    {/* Beside what it changes, rather than only in the page header —
-                                        this is where someone looking at an expiring card is. */}
-                                    {canManage && (
-                                        <button
-                                            type="button"
-                                            onClick={() => void openPortal()}
-                                            disabled={openingPortal}
-                                            className="rounded text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5] disabled:opacity-50"
-                                        >
-                                            {openingPortal ? "Opening…" : "Add or change"}
-                                        </button>
-                                    )}
-                                </div>
-                                <div className="p-4">
-                                    {data.paymentMethods.length === 0 ? (
-                                        <p className="text-[13px] text-[#6B7280]">
-                                            Nothing on file. Payments are collected by invoice until a method is added.
-                                        </p>
-                                    ) : (
-                                        <ul className="space-y-2">
-                                            {data.paymentMethods.map((method) => (
-                                                <li key={method.id} className="flex flex-wrap items-center gap-2 text-[13px] text-[#111827]">
-                                                    <span className="font-medium">{describeMethod(method)}</span>
-                                                    {method.expMonth && method.expYear && (
-                                                        <span className="text-[#6B7280]">
-                                                            expires {String(method.expMonth).padStart(2, "0")}/{method.expYear}
-                                                        </span>
-                                                    )}
-                                                    {method.isDefault && <PanelBadge tone="accent">Default</PanelBadge>}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                            </PanelCard>
-                        </div>
-
-                        {/* Who the invoices are billed to. Stripe holds this and the portal edits
-                            it, but until now the panel showed only what had been charged, never
-                            the name and address it was charged to — so there was no way to check
-                            a detail before or after a client changed it. */}
-                        <PanelCard>
+                        {/* One card for everything about the account rather than three.
+                            Subscription and Payment Methods were separate boxes saying things that
+                            belong with the address they are billed to — and the renewal state was
+                            already in the Renews tile above, so the box was mostly repeating it.
+                            The renewal control came with it; removing the boxes should not remove
+                            the only way to turn renewal off. */}
+                        <PanelCard className="mb-4">
                             <div className="flex items-center justify-between gap-3 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
                                 <h3 className="text-[13px] font-semibold text-[#111827]">Billing Information</h3>
                                 {canManage && (
@@ -366,26 +296,83 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                 )}
                             </div>
                             <div className="p-4">
-                                {!hasBillingDetails(data.billingDetails) ? (
-                                    <p className="text-[13px] text-[#6B7280]">
-                                        No billing details on file. They are captured at the first payment, or can be
-                                        set in Stripe.
-                                    </p>
-                                ) : (
-                                    /* A definition list on a fixed label column, so the values line
-                                       up with each other rather than each starting wherever its own
-                                       label happened to end. */
-                                    <dl className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
-                                        {/* Index-keyed: the address continuation rows deliberately
-                                            share an empty label, so the label is not unique. */}
-                                        {billingRows(data.billingDetails!).map(([label, value], i) => (
+                                {/* A definition list on a fixed label column, so the values line up
+                                    with each other rather than each starting wherever its own label
+                                    happened to end. */}
+                                <dl className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13px]">
+                                    {/* Index-keyed: the address continuation rows deliberately
+                                        share an empty label, so the label is not unique. */}
+                                    {hasBillingDetails(data.billingDetails) ? (
+                                        billingRows(data.billingDetails!).map(([label, value], i) => (
                                             <React.Fragment key={`${label}-${i}`}>
                                                 <dt className="text-[#6B7280]">{label}</dt>
                                                 <dd className="min-w-0 break-words text-[#111827]">{value}</dd>
                                             </React.Fragment>
-                                        ))}
-                                    </dl>
-                                )}
+                                        ))
+                                    ) : (
+                                        <>
+                                            <dt className="text-[#6B7280]">Billed to</dt>
+                                            <dd className="text-[#6B7280]">
+                                                Not set. Captured at the first payment, or set in Stripe.
+                                            </dd>
+                                        </>
+                                    )}
+
+                                    <dt className="text-[#6B7280]">Payment Method</dt>
+                                    <dd className="min-w-0 text-[#111827]">
+                                        {data.paymentMethods.length === 0 ? (
+                                            <span className="text-[#6B7280]">
+                                                Nothing on file — collected by invoice.
+                                            </span>
+                                        ) : (
+                                            <ul className="space-y-1">
+                                                {data.paymentMethods.map((method) => (
+                                                    <li key={method.id} className="flex flex-wrap items-center gap-2">
+                                                        <span>{describeMethod(method)}</span>
+                                                        {method.expMonth && method.expYear && (
+                                                            <span className="text-[#6B7280]">
+                                                                expires {String(method.expMonth).padStart(2, "0")}/
+                                                                {method.expYear}
+                                                            </span>
+                                                        )}
+                                                        {method.isDefault && <PanelBadge tone="accent">Default</PanelBadge>}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </dd>
+
+                                    <dt className="text-[#6B7280]">Renewal</dt>
+                                    <dd className="min-w-0 text-[#111827]">
+                                        {!data.subscription ? (
+                                            <span className="text-[#6B7280]">
+                                                No subscription — invoices are raised manually.
+                                            </span>
+                                        ) : (
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                                <span>
+                                                    {data.subscription.cancelAtPeriodEnd
+                                                        ? `Off. Access ends ${date(data.subscription.currentPeriodEnd)}.`
+                                                        : `On. Renews ${date(data.subscription.currentPeriodEnd)}.`}
+                                                </span>
+                                                {canManage && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void setAutoRenew(data.subscription!.cancelAtPeriodEnd)}
+                                                        disabled={renewalBusy}
+                                                        className="h-7 rounded-lg bg-[#F4F2F8] px-2.5 text-[12px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        {renewalBusy
+                                                            ? "Updating…"
+                                                            : data.subscription.cancelAtPeriodEnd
+                                                              ? "Turn Renewal On"
+                                                              : "Turn Renewal Off"}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </dd>
+                                </dl>
                             </div>
                         </PanelCard>
 
@@ -421,7 +408,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 <PanelTd className="whitespace-nowrap text-[#6B7280]">
                                                     {invoice.dueDate ? date(invoice.dueDate) : "On receipt"}
                                                 </PanelTd>
-                                                <PanelTd className="text-[#6B7280]">{invoice.description ?? "Retainer"}</PanelTd>
+                                                <PanelTd className="text-[#6B7280]">{describeLine(invoice.description)}</PanelTd>
                                                 <PanelTd>
                                                     <PanelBadge tone={INVOICE_TONES[invoice.status ?? ""] ?? "neutral"}>
                                                         {titleCase(invoice.status ?? "unknown")}
@@ -518,7 +505,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                         )}
                                                     </PanelTd>
                                                     <PanelTd className="whitespace-nowrap text-[#6B7280]">
-                                                        {payment.brand ? `${payment.brand} ••${payment.last4 ?? ""}` : "—"}
+                                                        {payment.brand ? `${titleCase(payment.brand)} ••${payment.last4 ?? ""}` : "—"}
                                                     </PanelTd>
                                                     <PanelTd>
                                                         <PanelBadge tone={PAYMENT_TONES[payment.status] ?? "neutral"}>

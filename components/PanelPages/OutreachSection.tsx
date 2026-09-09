@@ -20,6 +20,16 @@ import { PANEL_FIELD, PanelFieldLabel, PanelFieldSelect } from "@/components/ui/
 import { panelFetch } from "@/lib/panelFetch"
 
 /** A titled card in the panel's shape, so every section here is bounded the same way. */
+/**
+ * The caption above a row of summary tiles, naming the period they cover.
+ *
+ * The tracker's month/year picker lives up in the page header, so without this the totals sat as
+ * an unlabelled row and there was nothing on the block itself saying what it was totalling.
+ */
+const SummaryHeading: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <h2 className="mb-2 text-[13px] font-semibold text-[#111827]">{children}</h2>
+)
+
 const TrackerCard: React.FC<{
     title: React.ReactNode
     children: React.ReactNode
@@ -794,6 +804,12 @@ const OutreachSection = () => {
                                 const leaderboard = [...clientData].sort((a, b) => b.replyRate - a.replyRate || b.sent - a.sent)
                                 return (
                                     <>
+                                        {/* The rebuild onto PanelStat dropped the heading that
+                                            named the period these totals cover, leaving an
+                                            unlabelled row of tiles. */}
+                                        <SummaryHeading>
+                                            Monthly Summary — {months[selectedMonth - 1]} {selectedYear}
+                                        </SummaryHeading>
                                         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                                             <PanelStat label="Total Attempts" value={formatNumber(totals.sent)} />
                                             <PanelStat
@@ -978,12 +994,15 @@ const OutreachSection = () => {
                     ) : viewMode === "yearly" ? (
                         <div className="pb-32">
                             {yearlySummary ? (
+                                <>
+                                <SummaryHeading>{selectedYear} Year Summary</SummaryHeading>
                                 <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                                     <PanelStat label="Total Attempts" value={formatNumber(yearlySummary.totalAttempt)} />
                                     <PanelStat label="Total Meetings" value={formatNumber(yearlySummary.totalMeetingsSet)} />
                                     <PanelStat label="Clients Closed" value={formatNumber(yearlySummary.totalClientsLosed)} />
                                     <PanelStat label="Total Revenue" value={formatCurrency(yearlySummary.totalRevenue)} />
                                 </div>
+                                </>
                             ) : (
                                 <p className="py-12 text-center text-[13px] text-[#6B7280]">
                                     Nothing recorded for {selectedYear} yet.
@@ -1025,6 +1044,9 @@ const OutreachSection = () => {
                         <div className="pb-32">
                             {/* Totals first, then the channels that make them up — the same order
                                 the dashboard reads in, and the opposite of what this page did. */}
+                            <SummaryHeading>
+                                Monthly Summary — {months[selectedMonth - 1]} {selectedYear}
+                            </SummaryHeading>
                             <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
                                 <PanelStat label="Total Attempts" value={formatNumber(summary.attempts)} />
                                 <PanelStat
