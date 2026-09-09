@@ -25,7 +25,9 @@ export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    // .tsx too: the panel table markup is asserted by server-rendering the primitives, which needs
+    // JSX in the test file itself. The oxc jsx setting above is what compiles it.
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary", "html", "lcov"],
