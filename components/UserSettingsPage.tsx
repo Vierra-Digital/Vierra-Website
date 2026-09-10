@@ -217,15 +217,24 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       : "/api/profile/getSettings";
 
     if (!endpoint) {
+      /**
+       * No company named yet — the client view mounts this before viewClient is set. That is not
+       * a failure, and treating it as one is what made the cards flash "could not be loaded" for
+       * a beat before the real data replaced them. Staying in the loading state shows the
+       * skeleton until there is something to ask for.
+       */
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsLoadingSettings(false);
-      setSettingsUnavailable(readOnly);
+      setIsLoadingSettings(true);
+      setSettingsUnavailable(false);
       return;
     }
 
     let cancelled = false;
     const loadSettings = async () => {
       try {
+        // Re-entering the loading state on every run, so switching client does not show the
+        // previous one's values until the new ones land.
+        setIsLoadingSettings(true);
         const response = await fetch(endpoint);
         if (response.ok) {
           const { connections, ...settingsData } = await response.json();
@@ -474,20 +483,37 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setUpdateMessage(null);
     
     try {
-      const response = await fetch("/api/profile/updateName", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
+      /**
+       * A client's name is on their own row; yours is on your user. Posting a client's rename to
+       * the profile route would have renamed the staff member doing the renaming.
+       */
+      const managingClient = readOnly && canManageClient && billingCompanyId;
+      const response = await fetch(
+        managingClient
+          ? `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+          : "/api/profile/updateName",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to update name");
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.message || "Failed to update name");
       }
 
-      const userData = await fetchUserData();
-      if (userData) {
-        setName(userData.name || "");
-        onNameUpdate?.(userData.name);
+      if (managingClient) {
+        const saved = await response.json().catch(() => ({}));
+        setName(saved?.name ?? name);
+        onNameUpdate?.(saved?.name ?? name);
+      } else {
+        const userData = await fetchUserData();
+        if (userData) {
+          setName(userData.name || "");
+          onNameUpdate?.(userData.name);
+        }
       }
       
       setShowSuccessModal(true);
@@ -857,7 +883,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
                 <div className="flex items-center gap-2">
                   <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
-                  {!readOnly && (
+                  {/* A managing admin may rename a client — that is what the client view is
+                      for. Their picture and password are not offered here: a credential is not
+                      an ordinary field, and the avatar upload writes to the signed-in user's own
+                      storage, so it would replace the staff member's picture, not the client's. */}
+                  {settingsEditable && (
                     <button
                       type="button"
                       onClick={() => { setName(user.name || ""); setIsEditingName(true); }}
@@ -1098,7 +1128,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 titleClass={textPrimary}
                 descriptionClass={textSecondary}
               >
-                {!clientConnections ? (
+                {isLoadingSettings ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Loading…</p>
+                ) : !clientConnections ? (
                   <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
                 ) : clientConnections.google.length === 0 ? (
                   <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
@@ -1134,7 +1166,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 titleClass={textPrimary}
                 descriptionClass={textSecondary}
               >
-                {!clientConnections ? (
+                {isLoadingSettings ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Loading…</p>
+                ) : !clientConnections ? (
                   <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
                 ) : clientConnections.mailboxes.length === 0 ? (
                   <p className={`text-[13px] ${textSecondary}`}>No mailbox attached.</p>
@@ -1158,7 +1192,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 titleClass={textPrimary}
                 descriptionClass={textSecondary}
               >
-                {!clientConnections ? (
+                {isLoadingSettings ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Loading…</p>
+                ) : !clientConnections ? (
                   <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
                 ) : (
                   <ul className="space-y-2">

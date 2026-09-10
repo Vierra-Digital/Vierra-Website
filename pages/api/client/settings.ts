@@ -2,12 +2,14 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveBillingClient } from "@/lib/api/billingClient";
 
 /** Only these four columns may be written, and only with a value of the right shape. */
 const THEMES = new Set(["light", "dark", "auto"]);
 const LANGUAGES = new Set(["en", "es", "fr", "de", "it", "pt", "ru", "zh", "ja", "ko"]);
 
 type SettingsPatch = {
+  name?: string;
   language?: string;
   theme?: string;
   two_factor_enabled?: boolean;
@@ -24,6 +26,16 @@ function readPatch(body: unknown): { ok: true; data: SettingsPatch } | { ok: fal
   const input = body as Record<string, unknown>;
   const data: SettingsPatch = {};
 
+  if ("name" in input) {
+    // The client's display name lives on this row too, so staff renaming a client from the
+    // client view writes here rather than through the profile route, which is the staff
+    // member's own account.
+    if (typeof input.name !== "string") return { ok: false, message: "A name must be text." };
+    const trimmed = input.name.trim();
+    if (trimmed === "") return { ok: false, message: "A name is required." };
+    if (trimmed.length > 200) return { ok: false, message: "Keep the name under 200 characters." };
+    data.name = trimmed;
+  }
   if ("language" in input) {
     if (typeof input.language !== "string" || !LANGUAGES.has(input.language)) {
       return { ok: false, message: "Unsupported language." };
@@ -59,9 +71,10 @@ function readPatch(body: unknown): { ok: true; data: SettingsPatch } | { ok: fal
  * settings. A staff member opening a client's Settings therefore saw a Profile card and nothing
  * else, which reads as a broken page rather than a deliberate one.
  *
- * GET reads them; PUT changes them. A Vierra staff member may change a client's settings from the
- * client view, which is what that view is for. Identity is still off limits from there — a client's
- * name, picture and password are theirs, and nothing here touches them.
+ * GET reads them; PUT changes them, including the client's display name. A Vierra staff member
+ * may change a client's settings from the client view, which is what that view is for. Their
+ * picture and password stay theirs — a credential is not an ordinary field, and nothing here
+ * touches either.
  *
  * Scoping is the standard client-route pair — a representative always reads their own row, a
  * Vierra staff member names the client company they are looking at.
@@ -87,16 +100,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       // Scoped the same way the read is: a representative can only ever change their own row.
-      const target =
-        session.kind === "client"
-          ? await prisma.client.findFirst({ where: { id: session.clientId }, select: { id: true } })
-          : await prisma.client.findFirst({ where: { company_id: companyId }, select: { id: true } });
+      // The same resolver the billing routes use: a company with several clients must answer with
+      // the same one every time, or a read and a write land on different rows.
+      const target = await resolveBillingClient({
+        kind: session.kind,
+        clientId: session.kind === "client" ? session.clientId : undefined,
+        companyId,
+      });
       if (!target) return res.status(404).json({ message: "No client for that company." });
 
       const updated = await prisma.client.update({
         where: { id: target.id },
         data: { ...patch.data, updated_at: new Date() },
         select: {
+          name: true,
           language: true,
           theme: true,
           two_factor_enabled: true,
@@ -104,6 +121,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       });
       return res.status(200).json({
+        name: updated.name,
         emailNotifications: updated.email_notifications,
         twoFactorEnabled: updated.two_factor_enabled,
         theme: updated.theme,
@@ -124,10 +142,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email_notifications: true,
     } as const;
 
-    const client =
-      session.kind === "client"
-        ? await prisma.client.findFirst({ where: { id: session.clientId }, select })
-        : await prisma.client.findFirst({ where: { company_id: companyId }, select });
+    const resolved = await resolveBillingClient({
+      kind: session.kind,
+      clientId: session.kind === "client" ? session.clientId : undefined,
+      companyId,
+    });
+    const client = resolved
+      ? await prisma.client.findFirst({ where: { id: resolved.id }, select })
+      : null;
 
     if (!client) return res.status(404).json({ message: "No client for that company." });
 

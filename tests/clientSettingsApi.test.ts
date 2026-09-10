@@ -11,8 +11,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * member who names no company gets nothing rather than something.
  */
 
-const { clientFindFirst, clientUpdate, tokenFindMany, mailboxFindMany, requireSessionMock } = vi.hoisted(() => ({
+const { clientFindFirst, clientFindMany, clientUpdate, tokenFindMany, mailboxFindMany, requireSessionMock } = vi.hoisted(() => ({
   clientFindFirst: vi.fn(),
+  clientFindMany: vi.fn(),
   clientUpdate: vi.fn(),
   tokenFindMany: vi.fn(),
   mailboxFindMany: vi.fn(),
@@ -21,7 +22,7 @@ const { clientFindFirst, clientUpdate, tokenFindMany, mailboxFindMany, requireSe
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    client: { findFirst: clientFindFirst, update: clientUpdate },
+    client: { findFirst: clientFindFirst, findMany: clientFindMany, update: clientUpdate },
     platformToken: { findMany: tokenFindMany },
     emailProviderAccount: { findMany: mailboxFindMany },
   },
@@ -71,6 +72,9 @@ const call = (req: Record<string, unknown>) => {
 
 beforeEach(() => {
   clientFindFirst.mockReset().mockResolvedValue(ROW);
+  // resolveBillingClient lists a company's clients and picks one; the GET then reads that
+  // row by id, so both delegates answer.
+  clientFindMany.mockReset().mockResolvedValue([{ id: 'cl1', name: 'Acme', user_id: 'cu1', client_billing: null }]);
   clientUpdate.mockReset().mockResolvedValue({
     language: 'de',
     theme: 'light',
@@ -93,14 +97,14 @@ describe("method and access", () => {
     requireSessionMock.mockResolvedValue({ kind: "unaffiliated", user: { id: "x" } });
     const res = await call({ query: { companyId: "co1" } });
     expect(res.statusCode).toBe(403);
-    expect(clientFindFirst).not.toHaveBeenCalled();
+    expect(clientFindMany).not.toHaveBeenCalled();
   });
 
   it("stops when requireSession already answered", async () => {
     requireSessionMock.mockResolvedValue(null);
     const res = await call({ query: { companyId: "co1" } });
     expect(res.statusCode).toBe(0);
-    expect(clientFindFirst).not.toHaveBeenCalled();
+    expect(clientFindMany).not.toHaveBeenCalled();
   });
 
   it("makes a staff member name the company they are looking at", async () => {
@@ -108,10 +112,12 @@ describe("method and access", () => {
     // target there is nothing sensible to read.
     const res = await call({ query: {} });
     expect(res.statusCode).toBe(400);
+    expect(clientFindMany).not.toHaveBeenCalled();
     expect(clientFindFirst).not.toHaveBeenCalled();
   });
 
   it("404s a company with no client rather than inventing defaults", async () => {
+    clientFindMany.mockResolvedValue([]);
     clientFindFirst.mockResolvedValue(null);
     const res = await call({ query: { companyId: "co-empty" } });
     expect(res.statusCode).toBe(404);
@@ -121,13 +127,15 @@ describe("method and access", () => {
 describe("which row is read", () => {
   it("scopes a staff read to the named company", async () => {
     await call({ query: { companyId: "co1" } });
-    expect(clientFindFirst.mock.calls[0][0].where).toEqual({ company_id: "co1" });
+    expect(clientFindMany.mock.calls[0][0].where).toEqual({ company_id: "co1" });
   });
 
   it("ignores a companyId a representative sends and reads their own row", async () => {
     // A client naming someone else's company must not reach it.
     requireSessionMock.mockResolvedValue(CLIENT);
     await call({ query: { companyId: "someone-elses-company" } });
+    // A representative never reaches the company listing at all.
+    expect(clientFindMany).not.toHaveBeenCalled();
     expect(clientFindFirst.mock.calls[0][0].where).toEqual({ id: "cl1" });
   });
 });
@@ -249,7 +257,7 @@ describe("connections", () => {
 
 describe("failure", () => {
   it("500s rather than throwing out of the handler", async () => {
-    clientFindFirst.mockRejectedValue(new Error("db down"));
+    clientFindMany.mockRejectedValue(new Error("db down"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await call({ query: { companyId: "co1" } });
     expect(res.statusCode).toBe(500);
@@ -264,15 +272,15 @@ describe("PUT — a staff member changing a client's settings", () => {
   it("writes the change to that client's row", async () => {
     // The id comes from the scoped lookup, never from the request — a caller cannot name the row
     // to update.
-    clientFindFirst.mockResolvedValue({ id: "cl-real" });
+    clientFindMany.mockResolvedValue([{ id: "cl-real", name: "A", user_id: null, client_billing: null }]);
     const res = await put({ theme: "light" });
     expect(res.statusCode).toBe(200);
-    expect(clientFindFirst.mock.calls[0][0].where).toEqual({ company_id: "co1" });
+    expect(clientFindMany.mock.calls[0][0].where).toEqual({ company_id: "co1" });
     expect(clientUpdate.mock.calls[0][0].where).toEqual({ id: "cl-real" });
   });
 
   it("does not let the body choose which row is written", async () => {
-    clientFindFirst.mockResolvedValue({ id: "cl-real" });
+    clientFindMany.mockResolvedValue([{ id: "cl-real", name: "A", user_id: null, client_billing: null }]);
     await put({ theme: "light", id: "some-other-client", client_id: "another" });
     expect(clientUpdate.mock.calls[0][0].where).toEqual({ id: "cl-real" });
     expect(clientUpdate.mock.calls[0][0].data).not.toHaveProperty("id");
@@ -344,6 +352,7 @@ describe("PUT — a staff member changing a client's settings", () => {
   it("confines a representative to their own row, whatever company they name", async () => {
     requireSessionMock.mockResolvedValue(CLIENT);
     await put({ theme: "light" }, { companyId: "someone-elses-company" });
+    expect(clientFindMany).not.toHaveBeenCalled();
     expect(clientFindFirst.mock.calls[0][0].where).toEqual({ id: "cl1" });
   });
 
@@ -355,6 +364,7 @@ describe("PUT — a staff member changing a client's settings", () => {
   });
 
   it("404s a company with no client instead of creating one", async () => {
+    clientFindMany.mockResolvedValue([]);
     clientFindFirst.mockResolvedValue(null);
     const res = await put({ theme: "light" });
     expect(res.statusCode).toBe(404);
