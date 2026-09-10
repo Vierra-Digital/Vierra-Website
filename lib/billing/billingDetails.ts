@@ -22,9 +22,22 @@ export type BillingDetails = {
   address: BillingAddress | null;
 };
 
+/**
+ * Whether an address object carries anything.
+ *
+ * Stripe returns every field as an empty string rather than dropping the object when an address is
+ * cleared, so `address` stays truthy while holding nothing. Left unchecked, the card counted that
+ * as "has details" and then rendered no address rows and no "not set" message either — an empty
+ * space where one or the other belonged.
+ */
+function hasAddress(address: BillingAddress | null | undefined): boolean {
+  if (!address) return false;
+  return Object.values(address).some((value) => typeof value === "string" && value.trim() !== "");
+}
+
 /** Whether Stripe holds anything at all for this customer beyond an id. */
 export function hasBillingDetails(details: BillingDetails | null | undefined): boolean {
-  return !!details && !!(details.name || details.email || details.phone || details.address);
+  return !!details && !!(details.name || details.email || details.phone || hasAddress(details.address));
 }
 
 /**

@@ -1084,94 +1084,104 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                your own settings page, so the two read as one design rather than two. What differs
                is only what a staff member may do: no "Add account", no Reconnect, no Remove —
                those are OAuth grants only the account holder can make. */
-            <SettingsCard
-              title="Google Accounts"
-              icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
-              description="Connected Google accounts, mailboxes and platforms for this client."
-              cardClass={`rounded-2xl ${cardBg} border p-5`}
-              titleClass={textPrimary}
-              descriptionClass={textSecondary}
-            >
-              {!clientConnections ? (
-                <p className={`text-[13px] ${textSecondary}`}>
-                  This client&rsquo;s connections could not be loaded.
-                </p>
-              ) : (
-                <div className="space-y-5">
-                  {clientConnections.google.length === 0 ? (
-                    <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
-                  ) : (
-                    <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
-                      {/* One Google grant covers Gmail and Calendar both — the calendar routes
-                          read the same token — so this is one row, not two connections. */}
-                      {clientConnections.google.map((account) => (
-                        <div key={account.email} className="py-3.5 first:pt-0 last:pb-0">
-                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                            <div className="flex min-w-0 items-center gap-2.5">
-                              <span className={`truncate text-[13px] font-medium ${textPrimary}`}>
-                                {account.email}
-                              </span>
-                              <span
-                                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                                  account.needsReconnect
-                                    ? "bg-[#FDF3E2] text-[#8A5A00]"
-                                    : "bg-[#E7F7EE] text-[#11734B]"
-                                }`}
-                              >
-                                {account.needsReconnect ? "Needs reconnect" : "Connected"}
-                              </span>
-                            </div>
-                            <span className={`shrink-0 text-[12px] ${textSecondary}`}>
-                              Gmail and Calendar
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div>
-                    <p className={`mb-1.5 text-[11px] font-medium ${textSecondary}`}>
-                      Workspace Mailboxes
-                    </p>
-                    {clientConnections.mailboxes.length === 0 ? (
-                      <p className={`text-[13px] ${textSecondary}`}>No mailbox attached.</p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {clientConnections.mailboxes.map((mailbox) => (
-                          <li key={mailbox.email} className={`text-[13px] ${textPrimary}`}>
-                            {mailbox.email}
-                            {mailbox.label ? <span className={textSecondary}> · {mailbox.label}</span> : null}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className={`mb-1.5 text-[11px] font-medium ${textSecondary}`}>Other Platforms</p>
-                    <ul className="space-y-1">
-                      {([
-                        ["LinkedIn", clientConnections.linkedin],
-                        ["Facebook", clientConnections.facebook],
-                        ["Google Ads", clientConnections.googleads],
-                      ] as const).map(([label, connected]) => (
-                        <li key={label} className={`flex items-center justify-between text-[13px] ${textPrimary}`}>
-                          <span>{label}</span>
+            <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+              {/* Three boxes rather than one, on the same band as Profile / Security /
+                  Preferences above. Mailboxes and the other platforms were sections inside the
+                  Google card, which read as though Google owned them — a LinkedIn grant is not a
+                  Google account, and a workspace mailbox belongs to the company, not to a person's
+                  Google login. */}
+              <SettingsCard
+                title="Google Accounts"
+                icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
+                description="One grant covers Gmail and Calendar both."
+                cardClass={`h-full rounded-2xl ${cardBg} border p-5`}
+                titleClass={textPrimary}
+                descriptionClass={textSecondary}
+              >
+                {!clientConnections ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
+                ) : clientConnections.google.length === 0 ? (
+                  <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
+                ) : (
+                  <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
+                    {clientConnections.google.map((account) => (
+                      <div key={account.email} className="py-3 first:pt-0 last:pb-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                          <span className={`truncate text-[13px] font-medium ${textPrimary}`}>
+                            {account.email}
+                          </span>
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                              connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#F3F1F8] text-[#5B5468]"
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              account.needsReconnect
+                                ? "bg-[#FDF3E2] text-[#8A5A00]"
+                                : "bg-[#E7F7EE] text-[#11734B]"
                             }`}
                           >
-                            {connected ? "Connected" : "Not connected"}
+                            {account.needsReconnect ? "Needs reconnect" : "Connected"}
                           </span>
-                        </li>
-                      ))}
-                    </ul>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              )}
-            </SettingsCard>
+                )}
+              </SettingsCard>
+
+              <SettingsCard
+                title="Workspace Mailboxes"
+                icon={<FiMail className="w-4 h-4 text-[#701CC0]" />}
+                description="Attached to the company, not to one person's login."
+                cardClass={`h-full rounded-2xl ${cardBg} border p-5`}
+                titleClass={textPrimary}
+                descriptionClass={textSecondary}
+              >
+                {!clientConnections ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
+                ) : clientConnections.mailboxes.length === 0 ? (
+                  <p className={`text-[13px] ${textSecondary}`}>No mailbox attached.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {clientConnections.mailboxes.map((mailbox) => (
+                      <li key={mailbox.email} className={`truncate text-[13px] ${textPrimary}`}>
+                        {mailbox.email}
+                        {mailbox.label ? <span className={textSecondary}> · {mailbox.label}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SettingsCard>
+
+              <SettingsCard
+                title="Other Platforms"
+                icon={<FiRefreshCw className="w-4 h-4 text-[#701CC0]" />}
+                description="Advertising and social grants this client has made."
+                cardClass={`h-full rounded-2xl ${cardBg} border p-5`}
+                titleClass={textPrimary}
+                descriptionClass={textSecondary}
+              >
+                {!clientConnections ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {([
+                      ["LinkedIn", clientConnections.linkedin],
+                      ["Facebook", clientConnections.facebook],
+                      ["Google Ads", clientConnections.googleads],
+                    ] as const).map(([label, connected]) => (
+                      <li key={label} className={`flex items-center justify-between gap-2 text-[13px] ${textPrimary}`}>
+                        <span>{label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#F3F1F8] text-[#5B5468]"
+                          }`}
+                        >
+                          {connected ? "Connected" : "Not connected"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SettingsCard>
+            </div>
           ) : (
           <div className={`rounded-2xl ${cardBg} border p-5`}>
             <div className="flex items-center justify-between mb-5">

@@ -109,3 +109,43 @@ describe("billingRows", () => {
     expect(rows).toEqual([["Country", "GB"]]);
   });
 });
+
+describe("an address Stripe cleared", () => {
+  /**
+   * Clearing an address in Stripe leaves the object in place with every field an empty string
+   * rather than removing it. Treated as present, the card rendered neither address rows nor the
+   * "not set" line — just a gap.
+   */
+  const blank = {
+    line1: "",
+    line2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "",
+  };
+
+  it("does not count as having details", () => {
+    expect(hasBillingDetails({ name: null, email: null, phone: null, address: blank })).toBe(false);
+  });
+
+  it("still counts when another field is set", () => {
+    expect(hasBillingDetails({ name: "Acme", email: null, phone: null, address: blank })).toBe(true);
+  });
+
+  it("counts as soon as one address field has content", () => {
+    expect(
+      hasBillingDetails({ name: null, email: null, phone: null, address: { ...blank, city: "Medford" } })
+    ).toBe(true);
+  });
+
+  it("treats whitespace as empty", () => {
+    expect(
+      hasBillingDetails({ name: null, email: null, phone: null, address: { ...blank, line1: "   " } })
+    ).toBe(false);
+  });
+
+  it("produces no rows for it", () => {
+    expect(billingRows({ name: null, email: null, phone: null, address: blank })).toEqual([]);
+  });
+});

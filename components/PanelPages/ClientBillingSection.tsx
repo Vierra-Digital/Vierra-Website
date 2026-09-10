@@ -181,6 +181,16 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
         setPortalError("")
         try {
             const response = await fetch("/api/client/billing-portal", { method: "POST" })
+            /**
+             * 403 is "you are staff, not the customer". Stripe scopes a portal session to one
+             * customer, so there is genuinely nothing to open — and saying "only the client can
+             * manage their own billing" to the person running the agency reads as a fault rather
+             * than as how Stripe works. The click does nothing instead.
+             */
+            if (response.status === 403) {
+                setOpeningPortal(false)
+                return
+            }
             const body = await response.json().catch(() => ({}))
             if (!response.ok || !body?.url) throw new Error(body?.message || "Could not open the billing portal.")
             window.location.href = body.url as string
@@ -385,17 +395,15 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                         the card is Stripe's. Only a representative can open the
                                         portal — Stripe scopes that session to the customer — so
                                         staff are not offered a button that could only fail. */}
-                                    {canManage && (
-                                        <button
-                                            type="button"
-                                            onClick={() => void openPortal()}
-                                            disabled={openingPortal}
-                                            className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#D8D2E4] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:border-[#701CC0]/45 hover:bg-[#F5F3F9] disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <FiExternalLink className="h-4 w-4" />
-                                            {openingPortal ? "Opening…" : "Manage Payment Methods"}
-                                        </button>
-                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => void openPortal()}
+                                        disabled={openingPortal}
+                                        className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-[#D8D2E4] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:border-[#701CC0]/45 hover:bg-[#F5F3F9] disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <FiExternalLink className="h-4 w-4" />
+                                        {openingPortal ? "Opening…" : "Manage Payment Methods"}
+                                    </button>
                                 </div>
                             </div>
                         </PanelCard>
