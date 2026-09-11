@@ -1,6 +1,6 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
-import { asStr, asQueryStr } from "@/lib/api/parsing";
+import { asStr, asQueryStr, isUuid } from "@/lib/api/parsing";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
@@ -15,6 +15,14 @@ const EDITABLE_STATUSES = ["candidate", "reviewed", "rejected", "duplicate"];
 export default withAuth(
   async (req, res, session) => {
     const id = asQueryStr(req.query.id);
+    // cartography_contacts.id is a @db.Uuid column — findUnique below would otherwise throw
+    // (P2007) on a non-UUID id instead of the "not found" this route means to answer for any id
+    // that isn't a live candidate's, and that throw isn't caught locally (only the update() call
+    // below has its own try/catch), so it would fall through to withAuth's generic 500.
+    if (!isUuid(id)) {
+      res.status(404).json({ message: "Not found." });
+      return;
+    }
     const companyId = resolveTargetCompanyId(session, req);
     const existing = await prisma.cartographyContact.findUnique({ where: { id } });
     if (!existing || !companyId || existing.company_id !== companyId) {

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { EmailProviderAccount } from "@/lib/generated/prisma/client";
 import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
-import { asStr, asPort } from "@/lib/api/parsing";
+import { asStr, asPort, asQueryStr } from "@/lib/api/parsing";
 import { isBlockedSmtpHost } from "@/lib/email/smtp";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
@@ -31,8 +31,20 @@ function serializeAccount(row: EmailProviderAccount) {
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   if (req.method === "GET") {
+    // Reading/managing your own inboxes is never company-scoped by default — every other caller
+    // of this GET (the panel's account switcher, Settings) needs every mailbox you've ever
+    // connected, regardless of which client happens to be active. Campaign creation is the
+    // exception: a mailbox's company_id is fixed at connection time, and picking one from a
+    // different company than the campaign being created fails validation later with a confusing
+    // "must reference one of your connected mailboxes" — so campaign creation opts in explicitly
+    // (`scopeToCompany=1`) instead of this route silently scoping everyone by default.
+    const where: { user_id: string; company_id?: string } = { user_id: userId };
+    if (asQueryStr(req.query.scopeToCompany) === "1") {
+      const companyId = resolveTargetCompanyId(session, req);
+      if (companyId) where.company_id = companyId;
+    }
     const rows = await prisma.emailProviderAccount.findMany({
-      where: { user_id: userId },
+      where,
       orderBy: { created_at: "desc" },
     });
     res.status(200).json({ accounts: rows.map(serializeAccount) });

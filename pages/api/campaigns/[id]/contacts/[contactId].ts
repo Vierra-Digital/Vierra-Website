@@ -123,40 +123,48 @@ export default withAuth(async (req, res, session) => {
       return;
     }
 
-    const updated = await prisma.campaignContact.update({
-      where: { id: contactId },
+    // Guarded on the transition, atomically — not "read existing.lead_status, compare, then write"
+    // (that let two concurrent PATCHes to the same status both read the same stale row, both pass
+    // the guard, and both act: double-write the event, double-add to DNC, double-fire the Discord
+    // notification). Only the request whose updateMany actually flips the row (count > 0) is
+    // allowed to log the event or trigger any side effect; a no-op resubmit of the current status
+    // — same race, same fix — does nothing at all rather than polluting the event log. See
+    // .claude/schema_v2_campaigns_discord_notifications.md §4.
+    const transitioned = await prisma.campaignContact.updateMany({
+      where: { id: contactId, lead_status: { not: leadStatus } },
       data: { lead_status: leadStatus },
     });
-    await prisma.leadStatusEvent.create({
-      data: {
-        campaign_contact_id: contactId,
-        from_status: existing.lead_status,
-        to_status: leadStatus,
-        changed_by_user_id: session.user.id,
-        note: asStr(req.body?.note) || null,
-      },
-    });
 
-    if (leadStatus === REMOVE_CONTACT_STATUS) {
-      await addToDnc(campaignId, existing.contact_email);
-      await prisma.campaignContact.update({ where: { id: contactId }, data: { queue_status: "skipped", skip_reason: "removed_by_categorization" } });
-    }
-
-    // Guard on the transition, not just the new value — a no-op PATCH (re-saving the same status,
-    // e.g. a stale form re-submit) must not re-notify. See
-    // .claude/schema_v2_campaigns_discord_notifications.md §4.
-    if (leadStatus === "meeting_booked" && existing.lead_status !== "meeting_booked" && discordConfigured()) {
-      const campaignRow = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { name: true } });
-      const contactName = [existing.contact_first_name, existing.contact_last_name].filter(Boolean).join(" ");
-      await notifyMeetingBooked({
-        contactEmail: existing.contact_email,
-        contactName: contactName || null,
-        campaignId,
-        campaignName: campaignRow?.name ?? "(unknown)",
-        contactId,
+    if (transitioned.count > 0) {
+      await prisma.leadStatusEvent.create({
+        data: {
+          campaign_contact_id: contactId,
+          from_status: existing.lead_status,
+          to_status: leadStatus,
+          changed_by_user_id: session.user.id,
+          note: asStr(req.body?.note) || null,
+        },
       });
+
+      if (leadStatus === REMOVE_CONTACT_STATUS) {
+        await addToDnc(campaignId, existing.contact_email);
+        await prisma.campaignContact.update({ where: { id: contactId }, data: { queue_status: "skipped", skip_reason: "removed_by_categorization" } });
+      }
+
+      if (leadStatus === "meeting_booked" && discordConfigured()) {
+        const campaignRow = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { name: true } });
+        const contactName = [existing.contact_first_name, existing.contact_last_name].filter(Boolean).join(" ");
+        await notifyMeetingBooked({
+          contactEmail: existing.contact_email,
+          contactName: contactName || null,
+          campaignId,
+          campaignName: campaignRow?.name ?? "(unknown)",
+          contactId,
+        });
+      }
     }
 
+    const updated = await prisma.campaignContact.findUniqueOrThrow({ where: { id: contactId } });
     res.status(200).json({ contact: serializeCampaignContact(updated) });
     return;
   }

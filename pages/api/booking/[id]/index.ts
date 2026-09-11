@@ -3,7 +3,7 @@ import { EMAIL_REGEX } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy, createCalendarEvent, buildIcs, type BusyInterval, type CreatedCalendarEvent } from "@/lib/calendar/googleCalendar";
+import { getBusy, createCalendarEvent, buildIcs, resolveVisibleCalendarIds, type BusyInterval, type CreatedCalendarEvent } from "@/lib/calendar/googleCalendar";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { sendEmailCore, escapeHtml } from "@/lib/gmail/sendCore";
 import { getValidZoomAccessTokenForUser } from "@/lib/zoom/tokens";
@@ -110,7 +110,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     where: { booking_link_id: link.id, status: "confirmed", end_at: { gt: now } },
     select: { start_at: true, end_at: true },
   });
-  const calendarBusy = await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString());
+  const calendarIds = await resolveVisibleCalendarIds(link.user_id, link.account_email, token.accessToken);
+  const calendarBusy = await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString(), calendarIds);
   // null means the freeBusy call failed, not that the host has nothing on their calendar —
   // proceeding as if it were `[]` would let this booking go through over a real conflict we
   // simply couldn't see (see the matching fail-closed change in slots.ts).

@@ -248,6 +248,45 @@ const CartographySection: React.FC = () => {
     );
   }
 
+  // Artemis's `reasons` strings are its own internal scoring log format ("MISS industry w=1.00
+  // 0.28 similarity", "UNKNOWN industry w=1.00 the company's site does not say") -- readable to
+  // whoever tuned the matcher, not to the staff member deciding whether to trust this candidate.
+  // Parsed into plain language where the shape is recognized; anything unrecognized (a format
+  // Artemis hasn't sent us before) falls back to the raw string unchanged rather than mangling it.
+  function humanizeReason(raw: string): string {
+    const match = raw.match(/^(HIT|MISS|UNKNOWN)\s+(\w+)\s+w=[\d.]+\s*(.*)$/i);
+    if (!match) return raw;
+    const [, verdict, field, detail] = match;
+    const fieldLabel = field.charAt(0).toUpperCase() + field.slice(1);
+    const verdictPhrase =
+      verdict.toUpperCase() === "HIT"
+        ? `${fieldLabel} matches`
+        : verdict.toUpperCase() === "MISS"
+        ? `${fieldLabel} doesn't match your target`
+        : `${fieldLabel} unknown`;
+    const detailTrimmed = detail.trim();
+    if (!detailTrimmed) return verdictPhrase;
+    const similarityMatch = detailTrimmed.match(/^([\d.]+)\s*similarity$/i);
+    if (similarityMatch) {
+      return `${verdictPhrase} — ${Math.round(parseFloat(similarityMatch[1]) * 100)}% similarity`;
+    }
+    return `${verdictPhrase} — ${detailTrimmed}`;
+  }
+
+  // Artemis's own confidence score already weighs industry into `components.confidence`, but an
+  // explicit "MISS industry" (stated and wrong) or "UNKNOWN industry" (never stated) reason was
+  // still landing at e.g. 41% -- Partial Match territory -- even at a low underlying similarity.
+  // The actual scoring happens in Artemis, a separate service this repo has no access to; this
+  // only makes the UI reflect an industry problem more harshly than the raw number alone does.
+  // MISS is penalized harder than UNKNOWN -- a stated-and-wrong industry is worse than one the
+  // company's own site just never mentioned.
+  function industryConfidencePenalty(reasons: string[] | undefined): number {
+    const reason = reasons?.[0] || "";
+    if (/^MISS\s+industry\b/i.test(reason)) return 0.5;
+    if (/^UNKNOWN\s+industry\b/i.test(reason)) return 0.75;
+    return 1;
+  }
+
   // Confidence counts unknown attributes against it (see the title on ConfidenceBadge below) --
   // the three tiers below exist so a glance at the color tells the story match_ratio and
   // confidence together are meant to: "everything checked out" (high) vs "some things couldn't
@@ -264,14 +303,27 @@ const CartographySection: React.FC = () => {
     return "low";
   }
 
-  function ConfidenceBadge({ confidence, matchRatio }: { confidence?: number; matchRatio?: number }) {
+  function ConfidenceBadge({
+    confidence,
+    matchRatio,
+    rawConfidence,
+  }: {
+    confidence?: number;
+    matchRatio?: number;
+    /** Artemis's own number, before industryConfidencePenalty. Shown in the tooltip when it differs. */
+    rawConfidence?: number;
+  }) {
     if (typeof confidence !== "number") return null;
     const tier = confidenceTier(confidence);
     const style = CONFIDENCE_TIER_STYLE[tier];
+    const wasAdjusted = typeof rawConfidence === "number" && Math.round(rawConfidence * 100) !== Math.round(confidence * 100);
+    const title = wasAdjusted
+      ? `Lowered for an industry match issue — Artemis reported ${Math.round(rawConfidence! * 100)}%. confidence counts unknowns against it; match_ratio only counts what was actually verified`
+      : "confidence counts unknowns against it; match_ratio only counts what was actually verified";
     return (
       <div
         className={`flex shrink-0 flex-col items-end gap-1 rounded-xl px-3 py-2 ring-1 ${style.chip} ${style.ring}`}
-        title="confidence counts unknowns against it; match_ratio only counts what was actually verified"
+        title={title}
       >
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
           <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
@@ -412,6 +464,16 @@ const CartographySection: React.FC = () => {
                     </option>
                   ))}
                 </select>
+                {centerCity ? (
+                  <button
+                    type="button"
+                    onClick={() => setCenterCity("")}
+                    aria-label="Clear location filter"
+                    className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-2.5 py-2 text-xs font-medium text-[#6B7280] hover:bg-[#F9FAFB]"
+                  >
+                    Clear
+                  </button>
+                ) : null}
               </>
             ) : null}
             <button
@@ -576,8 +638,12 @@ const CartographySection: React.FC = () => {
                             const city = c.geo?.city?.value;
                             const region = c.geo?.region?.value;
                             const contact = c.contacts?.[0];
-                            const confidence = c.raw?.components?.confidence;
+                            const rawConfidence = c.raw?.components?.confidence;
                             const matchRatio = c.raw?.components?.match_ratio;
+                            const confidence =
+                              typeof rawConfidence === "number"
+                                ? Math.max(0, Math.min(1, rawConfidence * industryConfidencePenalty(c.raw?.reasons)))
+                                : undefined;
                             const tier = typeof confidence === "number" ? confidenceTier(confidence) : null;
                             return (
                               <div
@@ -604,7 +670,7 @@ const CartographySection: React.FC = () => {
                                     <BasisTag basis={c.name.basis} />
                                   </div>
                                   <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">
-                                    {c.raw?.reasons?.[0] || "—"}
+                                    {c.raw?.reasons?.[0] ? humanizeReason(c.raw.reasons[0]) : "—"}
                                   </p>
                                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[#F1EFF6] pt-2.5 text-xs text-[#6B7280]">
                                     <span className="inline-flex items-center gap-1">
@@ -618,7 +684,7 @@ const CartographySection: React.FC = () => {
                                     <span>{[city, region].filter(Boolean).join(", ") || "—"}</span>
                                   </div>
                                 </div>
-                                <ConfidenceBadge confidence={confidence} matchRatio={matchRatio} />
+                                <ConfidenceBadge confidence={confidence} matchRatio={matchRatio} rawConfidence={rawConfidence} />
                               </div>
                             );
                           })}

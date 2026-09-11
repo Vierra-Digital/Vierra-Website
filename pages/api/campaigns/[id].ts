@@ -1,7 +1,7 @@
 import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { asStr } from "@/lib/api/parsing";
+import { asStr, parseOptionalDate } from "@/lib/api/parsing";
 import { campaignPreflight } from "@/lib/campaigns/preflight";
 import { serializeCampaign } from "@/lib/api/campaigns";
 import {
@@ -13,7 +13,7 @@ import {
   translateMergeTagsForSmartlead,
 } from "@/lib/campaigns/smartlead/client";
 import { brevoConfigured } from "@/lib/campaigns/brevo/client";
-import { notifyCampaignCompleted, notifyCampaignLaunched, discordConfigured } from "@/lib/notify/discord";
+import { notifyCampaignCompleted, notifyCampaignLaunched, notifyCampaignCancelled, discordConfigured } from "@/lib/notify/discord";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -203,9 +203,6 @@ export default withAuth(async (req, res) => {
         },
       });
 
-      // "cancelled" is intentionally excluded — cancellation isn't "done," it's abandoned, and a
-      // distinct notification for that wasn't asked for. See
-      // .claude/schema_v2_campaigns_discord_notifications.md §5/§7.
       if (nextStatus === "completed" && discordConfigured()) {
         const [sentCount, contactCount] = await Promise.all([
           prisma.emailOutboundMessage.count({ where: { campaign_id: id } }),
@@ -220,6 +217,11 @@ export default withAuth(async (req, res) => {
       if (nextStatus === "active" && existing.status === "draft" && discordConfigured()) {
         const contactCount = await prisma.campaignContact.count({ where: { campaign_id: id } });
         await notifyCampaignLaunched({ campaignId: id, campaignName: existing.name, contactCount });
+      }
+
+      if (nextStatus === "cancelled" && discordConfigured()) {
+        const contactCount = await prisma.campaignContact.count({ where: { campaign_id: id } });
+        await notifyCampaignCancelled({ campaignId: id, campaignName: existing.name, fromStatus: existing.status, contactCount });
       }
 
       res.status(200).json({ campaign: serializeCampaign(updated) });
@@ -249,7 +251,15 @@ export default withAuth(async (req, res) => {
     const sendDelaySeconds = Number(req.body?.sendDelaySeconds);
     const sendJitterSeconds = Number(req.body?.sendJitterSeconds);
     const dailySendLimit = Number(req.body?.dailySendLimit);
-    const scheduledStartAtRaw = req.body?.scheduledStartAt;
+    let scheduledStartAt = existing.scheduled_start_at;
+    if (req.body?.scheduledStartAt !== undefined) {
+      const parsed = parseOptionalDate(asStr(req.body?.scheduledStartAt));
+      if (!parsed.ok) {
+        res.status(400).json({ message: "scheduledStartAt must be a valid date." });
+        return;
+      }
+      scheduledStartAt = parsed.value;
+    }
 
     const updated = await prisma.campaign.update({
       where: { id },
@@ -267,10 +277,7 @@ export default withAuth(async (req, res) => {
           req.body?.dailySendLimit !== undefined && Number.isFinite(dailySendLimit) && dailySendLimit > 0
             ? Math.floor(dailySendLimit)
             : existing.daily_send_limit,
-        scheduled_start_at:
-          req.body?.scheduledStartAt !== undefined
-            ? (asStr(scheduledStartAtRaw) ? new Date(asStr(scheduledStartAtRaw)) : null)
-            : existing.scheduled_start_at,
+        scheduled_start_at: scheduledStartAt,
         audience_filter: req.body?.audienceFilter !== undefined ? req.body.audienceFilter : existing.audience_filter,
       },
       include: {

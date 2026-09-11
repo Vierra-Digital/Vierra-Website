@@ -49,6 +49,35 @@ export const PanelHeader: React.FC<{ title: string; children?: React.ReactNode }
   </div>
 )
 
+/**
+ * The bar that replaces nothing — it sits between the header and the table once at least one row
+ * is selected, offering whatever bulk actions the page supports. Disappears the moment the
+ * selection is empty, same as Gmail's.
+ */
+export const PanelBulkBar: React.FC<{
+  count: number
+  label?: (count: number) => string
+  onClear: () => void
+  children: React.ReactNode
+}> = ({ count, label = (n) => `${n} selected`, onClear, children }) => {
+  if (count === 0) return null
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3 rounded-[10px] bg-[#F2E9FE] px-4 py-2.5">
+      <div className="flex items-center gap-3">
+        <span className="text-[13px] font-medium text-[#5F17A5]">{label(count)}</span>
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-[12.5px] font-medium text-[#701CC0] underline-offset-2 hover:underline"
+        >
+          Clear selection
+        </button>
+      </div>
+      <div className="flex items-center gap-2">{children}</div>
+    </div>
+  )
+}
+
 export const PanelSearch: React.FC<{
   id: string
   label: string
@@ -359,6 +388,39 @@ export type PanelColumn<T> = {
  *
  * Rows are sliced here too, so a page cannot paginate its display and count something else.
  */
+/**
+ * Row-selection wiring for PanelDataTable. `isRowSelectable` lets a page exclude rows that can't
+ * take the bulk action at all (e.g. "that's me" or "that's a pending invite, not a staff row") —
+ * excluded rows get no checkbox and are ignored by "select all on this page".
+ */
+export type PanelTableSelection = {
+  selectedKeys: Set<string>
+  onToggleRow: (key: string) => void
+  onTogglePage: (keys: string[], nextChecked: boolean) => void
+  isRowSelectable?: (key: string) => boolean
+}
+
+/** A checkbox tinted to match the panel's accent rather than the browser default. */
+const PanelCheckbox: React.FC<{
+  checked: boolean
+  indeterminate?: boolean
+  onChange: () => void
+  ariaLabel: string
+}> = ({ checked, indeterminate = false, onChange, ariaLabel }) => (
+  <input
+    type="checkbox"
+    checked={checked}
+    aria-label={ariaLabel}
+    onChange={onChange}
+    onClick={(e) => e.stopPropagation()}
+    ref={(el) => {
+      if (el) el.indeterminate = indeterminate
+    }}
+    style={{ accentColor: "#701CC0" }}
+    className="h-4 w-4 cursor-pointer rounded"
+  />
+)
+
 export function PanelDataTable<T>({
   rows,
   columns,
@@ -373,6 +435,7 @@ export function PanelDataTable<T>({
   emptyImage,
   emptyImageGapClassName,
   emptyAction,
+  selection,
 }: {
   rows: T[]
   columns: Array<PanelColumn<T>>
@@ -387,6 +450,8 @@ export function PanelDataTable<T>({
   emptyImage?: React.ReactNode
   emptyImageGapClassName?: string
   emptyAction?: React.ReactNode
+  /** Adds a checkbox column when present. Omit entirely for a page with no bulk actions. */
+  selection?: PanelTableSelection
 }) {
   if (loading) {
     return <div className="flex items-center justify-center py-12">{loadingLabel}</div>
@@ -410,10 +475,30 @@ export function PanelDataTable<T>({
   const safePage = Math.min(page, totalPages - 1)
   const visible = rows.slice(safePage * pageSize, (safePage + 1) * pageSize)
 
+  const selectablePageKeys = selection
+    ? visible.map(getRowKey).filter((key) => selection.isRowSelectable?.(key) ?? true)
+    : []
+  const allPageSelected = selection
+    ? selectablePageKeys.length > 0 && selectablePageKeys.every((key) => selection.selectedKeys.has(key))
+    : false
+  const somePageSelected = selection ? selectablePageKeys.some((key) => selection.selectedKeys.has(key)) : false
+
   return (
     <PanelCard>
       <PanelTable>
         <PanelThead>
+          {selection && (
+            <PanelTh className="w-10">
+              {selectablePageKeys.length > 0 ? (
+                <PanelCheckbox
+                  checked={allPageSelected}
+                  indeterminate={!allPageSelected && somePageSelected}
+                  onChange={() => selection.onTogglePage(selectablePageKeys, !allPageSelected)}
+                  ariaLabel="Select all rows on this page"
+                />
+              ) : null}
+            </PanelTh>
+          )}
           {columns.map((column) => (
             <PanelTh key={column.key} className={column.align === "right" ? "!text-right" : ""}>
               {column.header}
@@ -421,18 +506,33 @@ export function PanelDataTable<T>({
           ))}
         </PanelThead>
         <PanelTbody>
-          {visible.map((row) => (
-            <PanelTr key={getRowKey(row)}>
-              {columns.map((column) => (
-                <PanelTd
-                  key={column.key}
-                  className={`${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}
-                >
-                  {column.cell(row)}
-                </PanelTd>
-              ))}
-            </PanelTr>
-          ))}
+          {visible.map((row) => {
+            const key = getRowKey(row)
+            const selectable = selection ? (selection.isRowSelectable?.(key) ?? true) : false
+            return (
+              <PanelTr key={key}>
+                {selection && (
+                  <PanelTd className="w-10">
+                    {selectable ? (
+                      <PanelCheckbox
+                        checked={selection.selectedKeys.has(key)}
+                        onChange={() => selection.onToggleRow(key)}
+                        ariaLabel="Select row"
+                      />
+                    ) : null}
+                  </PanelTd>
+                )}
+                {columns.map((column) => (
+                  <PanelTd
+                    key={column.key}
+                    className={`${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}
+                  >
+                    {column.cell(row)}
+                  </PanelTd>
+                ))}
+              </PanelTr>
+            )
+          })}
         </PanelTbody>
       </PanelTable>
       {/* Nothing to page to, nothing to show. */}

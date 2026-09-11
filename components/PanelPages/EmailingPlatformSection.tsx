@@ -1,36 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EMAIL_REGEX } from "@/lib/utils";
-import { toContactsCsv, type CsvContactRowWithMeta } from "@/lib/contacts/csv";
 import { Geist } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
-import { FaGoogle } from "react-icons/fa";
 import {
   FiAlertCircle,
   FiArchive,
   FiCheckSquare,
   FiCheck,
-  FiChevronDown,
   FiClock,
-  FiLock,
   FiChevronsRight,
   FiCornerUpLeft,
-  FiDownload,
   FiCalendar,
   FiEdit3,
-  FiFeather,
-  FiFilter,
-  FiFileText,
-  FiImage,
-  FiLink,
   FiPaperclip,
-  FiPrinter,
   FiMail,
-  FiMaximize2,
-  FiMinimize2,
-  FiMoreVertical,
   FiMove,
   FiPlus,
   FiRefreshCw,
@@ -41,19 +26,13 @@ import {
   FiSettings,
   FiStar,
   FiShield,
-  FiZap,
   FiTag,
-  FiUpload,
-  FiUserPlus,
   FiTrash2,
-  FiType,
-  FiUsers,
   FiX,
 } from "react-icons/fi";
 // Feather has no reply-all glyph; two overlapping arrows read as a smudge at 16px. Material's
 // is the same double-arrow Gmail uses.
 import { MdReplyAll } from "react-icons/md";
-import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal from "@/components/ui/PromptModal";
@@ -61,25 +40,24 @@ import { MdRefresh } from "react-icons/md";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 
 import { isSafeEmailHref, stripRemoteUrlsFromStyle, UNSAFE_EMAIL_TAG_SELECTOR } from "@/lib/email/htmlSafety";
-import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
-import { printComposeContent } from "@/components/email/printCompose";
 import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
-import { prepareSendRequest, sendPanelEmail } from "@/lib/email/sendRequest";
-import { getJson } from "@/lib/email/panelApi";
-import { panelFetch } from "@/lib/panelFetch";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import KeyboardShortcutsModal from "@/components/email/KeyboardShortcutsModal";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import MoveToMenu from "@/components/email/MoveToMenu";
 import MeetingInviteCard from "@/components/email/MeetingInviteCard";
-import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
-  ICON_BUTTON, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
+  ICON_BUTTON, ALERT,
 } from "@/components/email/emailTheme";
+import { useComposeWindow } from "./EmailingPlatformSection/hooks/useComposeWindow";
+import ComposeWindow from "./EmailingPlatformSection/ComposeWindow";
+import InlineReply from "./EmailingPlatformSection/InlineReply";
+import { useContactsPanel } from "./EmailingPlatformSection/hooks/useContactsPanel";
+import ContactsPanel, { ContactsModals } from "./EmailingPlatformSection/ContactsPanel";
+import { MailboxLoader } from "./EmailingPlatformSection/mailboxUi";
 import {
   PAGE_SIZE,
-  CONTACTS_PAGE_SIZE,
-  COMPOSE_NEUTRAL_SCROLLBAR,
-  validateRecipientCsv,
   EMPTY_COUNTS,
   MODULES,
   orderModules,
@@ -93,39 +71,12 @@ import type {
   ThreadMessage,
   MailboxCounts,
   ModuleUnreadBadgeCounts,
-  ContactTag,
-  ContactRow,
-  ContactVisibility,
   ProviderAccount,
   BlockedSenderRow,
-  LocalEmailDraft,
 } from "@/components/email/types";
 
 // Site brand font (matches vierradev.com); replaces the panel's former Inter.
 const panelFont = Geist({ subsets: ["latin"] });
-
-type ContactsImportIssueRow = CsvContactRowWithMeta & {
-  reasons: string[];
-  saving?: boolean;
-};
-
-const ISSUE_EDITABLE_FIELDS = ["firstName", "lastName", "email", "phone", "business", "website", "address", "tags"] as const;
-const ISSUE_FIELD_LABELS: Record<(typeof ISSUE_EDITABLE_FIELDS)[number], string> = {
-  firstName: "First Name",
-  lastName: "Last Name",
-  email: "Email",
-  phone: "Phone",
-  business: "Business",
-  website: "Website",
-  address: "Address",
-  tags: "Tags",
-};
-
-/** Format a Date as a `<input type="datetime-local">` value in the viewer's local timezone. */
-function toDatetimeLocalValue(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 // Lazy-load the Analytics view (recharts is heavy) so it stays out of the initial panel bundle.
 const EmailAnalyticsView = dynamic(() => import("@/components/email/EmailAnalyticsView"), {
@@ -158,36 +109,11 @@ const CartographyView = dynamic(() => import("@/components/PanelPages/Cartograph
   ),
 });
 
-// Lazy-load the compose editor (~13 @tiptap/* packages — a real chunk of the panel's Script
-// Evaluation time) so it's fetched/parsed/evaluated only when the user actually opens
-// compose/reply, not on every inbox load. printComposeContent is a plain window.print() helper
-// with no TipTap dependency, split into its own module (components/email/printCompose.ts) so
-// importing it here doesn't drag the editor bundle back in as a side effect.
-const ComposeRichEditor = dynamic(() => import("@/components/email/ComposeRichEditor"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-full min-h-[200px] flex items-center justify-center">
-      <div className="w-8 h-8 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
-    </div>
-  ),
-});
-
-// Lazy-load the PDF sign modal — only needed for the rare "sign this attachment" action.
-const SignPdfModal = dynamic(() => import("@/components/email/SignPdfModal"), { ssr: false });
 type EmailingPlatformSectionProps = {
   initialSelectedAccounts?: string[];
   /** Gmail thread id to auto-open (the whole conversation) once the inbox loads — deep link, e.g. from a Discord alert. */
   initialOpenThreadId?: string;
 };
-
-const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages..." }) => (
-  <div className="h-full min-h-[320px] flex items-center justify-center px-6">
-    <div className="text-center">
-      <div className="mx-auto w-12 h-12 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
-      <p className="mt-4 text-sm font-medium text-[#5B5E73]">{label}</p>
-    </div>
-  </div>
-);
 
 const MailboxEmpty: React.FC = () => (
   <div className="h-full min-h-[320px] flex items-center justify-center px-6">
@@ -206,19 +132,6 @@ const MailboxEmpty: React.FC = () => (
   </div>
 );
 
-// Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
-// request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
-/**
- * Total attachment bytes accepted before sending, measured decoded.
- *
- * The ceiling is the serverless request-body limit, not Gmail: API routes run as functions with a
- * 6 MB payload cap, and base64 inflates a file by a third, so 4 MB of files is about 5.4 MB on the
- * wire with room for the rest of the JSON. This was 20 MB — which encodes to roughly 27 MB — so a
- * large attachment passed this check and then failed at the platform, surfacing as a bare
- * "Failed to send." with nothing pointing at the size.
- */
-const MAX_TOTAL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
-
 /**
  * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
  * well under the serverless function limit, so a stalled upstream surfaces as a clear message
@@ -228,6 +141,14 @@ const ACTION_TIMEOUT_MS = 15_000;
 
 /** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
 const MESSAGE_CACHE_LIMIT = 12;
+
+/** Mailbox destinations a message can be dropped onto. */
+const MESSAGE_DROP_ACTIONS: Record<string, "moveToInbox" | "moveToSpam" | "moveToTrash" | "archive"> = {
+  inbox: "moveToInbox",
+  spam: "moveToSpam",
+  trash: "moveToTrash",
+  archive: "archive",
+};
 
 /**
  * Last-known enabled account selection, so a repeat visit can start fetching messages/counts
@@ -263,50 +184,6 @@ function writeCachedSelectedAccounts(accounts: string[]): void {
     /* storage unavailable (disabled, quota, private mode) — the panel just falls back to the gate wait */
   }
 }
-
-/**
- * "Help me write" bolt. The stroke draws itself on a loop rather than pulsing a filled glyph —
- * a filled icon can only fade or scale, which reads as a notification badge, not as writing.
- * Drafting speeds the draw up and brightens it.
- */
-const BoltDraw: React.FC<{ className?: string; drafting?: boolean }> = ({ className, drafting }) => (
-  <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden focusable="false">
-    <path
-      d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={drafting ? "bolt-draw is-drafting" : "bolt-draw"}
-    />
-  </svg>
-);
-
-/** Google Drive mark, inline so the button carries the real logo without a remote fetch. */
-const DriveMark: React.FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 87.3 78" className={className} aria-hidden focusable="false">
-    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
-    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" />
-    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335" />
-    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" />
-    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" />
-    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00" />
-  </svg>
-);
-
-/**
- * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
- * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
- * brand-tinted disc rather than an outlined box, which is what made the old bar look blocky.
- */
-const composeIconClass = (active = false) =>
-  `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:pointer-events-none disabled:opacity-35 ${
-    active ? "bg-[#701CC0]/18 text-[#C8A6F5]" : "text-[#9C95B8] hover:bg-white/[0.07] hover:text-[#E7E2F5]"
-  }`;
-
-/** Row in the compose "More options" menu. */
-const composeMenuItemClass =
-  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#D8D3EA] transition-colors duration-150 hover:bg-white/[0.06] disabled:pointer-events-none disabled:opacity-40";
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
@@ -399,31 +276,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [scheduledError, setScheduledError] = useState("");
   const [cancelingScheduledId, setCancelingScheduledId] = useState("");
 
-  const [isComposeOpen, setIsComposeOpen] = useState(false);
-  const [composeTo, setComposeTo] = useState("");
-  const [composeCc, setComposeCc] = useState("");
-  const [composeBcc, setComposeBcc] = useState("");
-  const [showCc, setShowCc] = useState(false);
-  const [showBcc, setShowBcc] = useState(false);
-  const [composeSubject, setComposeSubject] = useState("");
-  const [composeBody, setComposeBody] = useState("");
-  const [composeBodyHtml, setComposeBodyHtml] = useState("");
-  const [composeAttachments, setComposeAttachments] = useState<
-    Array<{ id: string; filename: string; contentType: string; contentBase64: string }>
-  >([]);
-  const [signModalOpen, setSignModalOpen] = useState(false);
-  const [composeBookingLinks, setComposeBookingLinks] = useState<Array<{ id: string; slug: string; title: string }>>([]);
-  const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
-  const [composeTemplates, setComposeTemplates] = useState<
-    Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
-  >([]);
-  // Set when a brand-new compose opens (openNewCompose) so the signatures effect appends the
-  // account's default signature once — never on replies/drafts (their body is pre-filled).
-  const composeInsertDefaultSigRef = useRef(false);
-  const [composeSignatures, setComposeSignatures] = useState<
-    Array<{ id: string; name: string; signatureHtml: string | null; signatureText: string | null; isDefault: boolean }>
-  >([]);
-  const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
   const [creatingLabel, setCreatingLabel] = useState(false);
@@ -446,86 +298,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
   const [deletingLabel, setDeletingLabel] = useState(false);
-  const [artemisPromptOpen, setArtemisPromptOpen] = useState(false);
-  const [saveTemplateName, setSaveTemplateName] = useState("");
-  const [saveTemplateSaving, setSaveTemplateSaving] = useState(false);
-  const composeEditorRef = useRef<ComposeRichEditorHandle | null>(null);
-  const composeAttachInputRef = useRef<HTMLInputElement | null>(null);
-  const [composeFormattingToolbarOpen, setComposeFormattingToolbarOpen] = useState(false);
-  const [composeAccountEmail, setComposeAccountEmail] = useState("");
-  const [composeFrom, setComposeFrom] = useState("");
-  const [composeAliases, setComposeAliases] = useState<
-    Array<{ email: string; displayName: string; isPrimary: boolean; accountEmail: string }>
-  >([]);
-  const [composeThreadId, setComposeThreadId] = useState("");
-  const [composeInReplyTo, setComposeInReplyTo] = useState("");
-  const [composeReferences, setComposeReferences] = useState("");
-  const [sendingCompose, setSendingCompose] = useState(false);
-  const [undoCountdown, setUndoCountdown] = useState<number | null>(null);
-  /** Scheduled send: ISO-ish `datetime-local` value; empty = send now. */
-  const [scheduleAt, setScheduleAt] = useState("");
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  /** Compose overflow menu (Gmail's "⋮ More options") — holds the insert/print actions. */
-  const [composeMoreOpen, setComposeMoreOpen] = useState(false);
-  /** Confidential mode: send an access-controlled link instead of the raw body. */
-  const [confidentialOn, setConfidentialOn] = useState(false);
-  const [confidentialExpiry, setConfidentialExpiry] = useState<"1d" | "1w" | "1m" | "never">("1w");
-  const [confidentialPasscode, setConfidentialPasscode] = useState("");
-  const [confidentialOpen, setConfidentialOpen] = useState(false);
-  /** Request a read receipt (Disposition-Notification-To) on send. */
-  const [requestReceipt, setRequestReceipt] = useState(false);
-  // Set on a brand-new compose so the settings effect can apply this inbox's read-receipt default
-  // once — never on replies/drafts, and the user can still toggle it off.
-  const composeReadReceiptDefaultRef = useRef(false);
-  const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  /**
-   * The message waiting out its undo window, as a request body.
-   *
-   * Undo used to live entirely in a setTimeout, and the unmount cleanup cleared it — so closing the
-   * tab or navigating away within the undo window (up to 30s) silently threw the email away. It was
-   * not queued anywhere and no draft survived it. Held here so it can be flushed on the way out.
-   */
-  const pendingSendBodyRef = useRef<string | null>(null);
-  const [artemisDrafting, setArtemisDrafting] = useState(false);
-  const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
-  const draftSaveQueue = useRef(new Map<string, Promise<boolean>>());
-  const composeClosePending = useRef(false);
-  const composeEditVersion = useRef(0);
-  const [draftSaveState, setDraftSaveState] = useState("");
-  const [composeError, setComposeError] = useState("");
-  const [composeSuccess, setComposeSuccess] = useState("");
-  const [sentToastMessage, setSentToastMessage] = useState<string | null>(null);
+  const [sentToast, setSentToast] = useState<{ message: string; undo?: () => void } | null>(null);
   const sentToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [composeExpanded, setComposeExpanded] = useState(false);
-  const [composeActiveDraftKey, setComposeActiveDraftKey] = useState("");
-  const [inlineComposeMode, setInlineComposeMode] = useState<null | "reply" | "replyAll" | "forward">(null);
-  const [inlineComposeTo, setInlineComposeTo] = useState("");
-  /** Cc/Bcc on the inline reply. Gmail keeps them one click from the recipient line. */
-  const [inlineComposeCc, setInlineComposeCc] = useState("");
-  const [inlineComposeBcc, setInlineComposeBcc] = useState("");
-  const [inlineShowCc, setInlineShowCc] = useState(false);
-  /** Gmail shows the recipient as text; it only becomes a field once you click it. */
-  const [inlineToEditing, setInlineToEditing] = useState(false);
-  /** Formatting bar is opt-in, as in Gmail — the "Aa" toggle in the send row reveals it. */
-  const [inlineShowFormatting, setInlineShowFormatting] = useState(false);
-  const [inlineShowBcc, setInlineShowBcc] = useState(false);
-  /** Inline reply overflow menu — switches reply mode, as Gmail's does. */
-  const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
-  const [inlineComposeSubject, setInlineComposeSubject] = useState("");
-  const [inlineComposeIntroText, setInlineComposeIntroText] = useState("");
-  /** Rich-text form of the reply body. Plain text stays in sync for the text/plain part. */
-  const [inlineComposeIntroHtml, setInlineComposeIntroHtml] = useState("");
-  const inlineEditorRef = useRef<ComposeRichEditorHandle | null>(null);
-  const [inlineComposeBodyText, setInlineComposeBodyText] = useState("");
-  const [inlineComposeBodyHtml, setInlineComposeBodyHtml] = useState("");
-  const [inlineComposePreviewHtml, setInlineComposePreviewHtml] = useState("");
-  const [inlineComposeThreadId, setInlineComposeThreadId] = useState("");
-  const [inlineComposeInReplyTo, setInlineComposeInReplyTo] = useState("");
-  const [inlineComposeReferences, setInlineComposeReferences] = useState("");
-  const [inlineComposeSending, setInlineComposeSending] = useState(false);
-  const [inlineComposeError, setInlineComposeError] = useState("");
-  const [inlineComposeSuccess, setInlineComposeSuccess] = useState("");
   const [blockedSenders, setBlockedSenders] = useState<BlockedSenderRow[]>([]);
   const [blockSuccessModal, setBlockSuccessModal] = useState<{
     open: boolean;
@@ -536,79 +310,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     title: "",
     message: "",
   });
-  const [contactsImportSuccessOpen, setContactsImportSuccessOpen] = useState(false);
-  const [contactsImportIssuesModal, setContactsImportIssuesModal] = useState<{
-    open: boolean;
-    imported: number;
-    skipped: number;
-    headerErrors: string[];
-    rowErrors: ContactsImportIssueRow[];
-  }>({
-    open: false,
-    imported: 0,
-    skipped: 0,
-    headerErrors: [],
-    rowErrors: [],
-  });
-  const [contacts, setContacts] = useState<ContactRow[]>([]);
-  const [contactsLoading, setContactsLoading] = useState(false);
-  const [contactsError, setContactsError] = useState("");
-  const [contactCurrentPage, setContactCurrentPage] = useState(1);
-  const [contactsTotalPages, setContactsTotalPages] = useState(1);
-  const [contactsTotalCount, setContactsTotalCount] = useState(0);
-  const [contactsTags, setContactsTags] = useState<ContactTag[]>([]);
-  const [contactSearch, setContactSearch] = useState("");
-  const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
-  const [contactTagFilter, setContactTagFilter] = useState("");
-  const [contactSourceFilter, setContactSourceFilter] = useState<"" | "MANUAL" | "GMAIL" | "CSV">("");
-  const [contactFilterOpen, setContactFilterOpen] = useState(false);
-  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
-  const [addContactForm, setAddContactForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    business: "",
-    website: "",
-    address: "",
-  });
-  const [addingContact, setAddingContact] = useState(false);
-  const [addContactError, setAddContactError] = useState("");
-  const [addContactFirstNameTouched, setAddContactFirstNameTouched] = useState(false);
-  const [isEditContactModalOpen, setIsEditContactModalOpen] = useState(false);
-  const [editingContactId, setEditingContactId] = useState("");
-  const [editContactForm, setEditContactForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    business: "",
-    website: "",
-    address: "",
-  });
-  const [editingContact, setEditingContact] = useState(false);
-  const [editContactError, setEditContactError] = useState("");
-  const [editContactTouched, setEditContactTouched] = useState({
-    firstName: false,
-    email: false,
-    phone: false,
-    website: false,
-  });
-  const [contactToDelete, setContactToDelete] = useState<ContactRow | null>(null);
-  const [deletingContact, setDeletingContact] = useState(false);
-  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
-  const [confirmBulkDeleteContacts, setConfirmBulkDeleteContacts] = useState(false);
-  const [bulkContactActionLoading, setBulkContactActionLoading] = useState(false);
-  const [bulkContactActionError, setBulkContactActionError] = useState("");
-  const [contactsVisibility, setContactsVisibility] = useState<ContactVisibility>({
-    showPhone: true,
-    showBusiness: true,
-    showWebsite: true,
-  });
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([]);
-  const importInputRef = useRef<HTMLInputElement | null>(null);
   const loadMessagesRequestRef = useRef(0);
-  const loadContactsRequestRef = useRef(0);
   /**
    * Per-view message cache (key = the messages query string) powering stale-while-revalidate,
    * so revisiting a mailbox/page paints instantly instead of spinning. Cleared whenever an action
@@ -643,9 +346,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
   const labelMenuRef = useRef<HTMLDivElement | null>(null);
-  const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
-  const inlineComposeRef = useRef<HTMLDivElement | null>(null);
-  const editContactModalRef = useRef<HTMLDivElement | null>(null);
 
   const connectedAccounts = useMemo(() => gmailAccounts.filter((a) => a.connected), [gmailAccounts]);
   const selectedAccountsKey = useMemo(() => selectedAccounts.join(","), [selectedAccounts]);
@@ -686,7 +386,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     activeModule === "starred" ||
     activeModule === "important" ||
     Boolean(activeLabelId);
-  const activeAccountForContacts = selectedAccounts[0] || "";
 
   const filteredMessages = useMemo(() => {
     if (!searchTerm.trim()) return messages;
@@ -707,17 +406,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // messages, which is worse than showing a chain across several rows. A message is a row.
   const conversationRows = filteredMessages;
 
-  // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
-  // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
-  const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
-  /**
-   * Recipients that failed verification (bad syntax, or a domain with no MX records).
-   *
-   * /api/gmail/verify-email has existed for a while with nothing calling it, so a typo in a
-   * recipient was only discovered by the bounce. Checked while composing, reported as a warning
-   * rather than a block — a valid address can still look unverifiable to a DNS lookup.
-   */
-  const [composeBadRecipients, setComposeBadRecipients] = useState<string[]>([]);
   /** Rows per mailbox page. PAGE_SIZE is the default; Settings → Layout can override it. */
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
   useEffect(() => {
@@ -736,104 +424,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     };
   }, []);
 
-
-  // Verify recipients as they are typed. Debounced, because this runs a DNS lookup per address,
-  // and skipped entirely while the field is empty or the composer is shut.
-  useEffect(() => {
-    if (!isComposeOpen) {
-      setComposeBadRecipients([]);
-      return;
-    }
-    const addresses = composeTo
-      .split(/[,;]/)
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.includes("@"));
-    if (addresses.length === 0) {
-      setComposeBadRecipients([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      fetch("/api/gmail/verify-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: addresses.slice(0, 25) }),
-      })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload) => {
-          if (cancelled || !payload) return;
-          const results = Array.isArray(payload?.results) ? payload.results : [];
-          setComposeBadRecipients(
-            results
-              // "error" means the lookup itself failed (timeout, resolver trouble), which says
-              // nothing about the address — only report addresses actually judged bad.
-              .filter((entry: { valid?: boolean; reason?: string }) => entry?.valid === false && entry?.reason !== "error")
-              .map((entry: { email?: string }) => String(entry?.email || ""))
-              .filter(Boolean)
-          );
-        })
-        .catch(() => {
-          /* verification is advisory; never block composing on it */
-        });
-    }, 600);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [composeTo, isComposeOpen]);
-
-  useEffect(() => {
-    if (!isComposeOpen || !composeAccountEmail) {
-      setComposeDeliverability(null);
-      return;
-    }
-    const domain = composeAccountEmail.split("@")[1];
-    if (!domain) return;
-    let cancelled = false;
-    fetch(`/api/gmail/deliverability?domain=${encodeURIComponent(domain)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled && d) setComposeDeliverability({ spfOk: Boolean(d?.spf?.found), dmarcOk: Boolean(d?.dmarc?.found) });
-      })
-      .catch(() => {
-        /* non-blocking */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isComposeOpen, composeAccountEmail]);
-
-  const composeLintWarnings = useMemo(() => {
-    const warnings: string[] = [];
-    const subject = composeSubject || "";
-    const body = (composeBody || "").toLowerCase();
-    const letters = subject.replace(/[^a-zA-Z]/g, "");
-    const caps = subject.replace(/[^A-Z]/g, "");
-    if (letters.length >= 6 && caps.length / letters.length > 0.7) {
-      warnings.push("Subject is mostly capitals — can trip spam filters.");
-    }
-    if ((subject.match(/!/g) || []).length >= 2 || /\$\$\$|100% free|act now|risk-free/i.test(subject)) {
-      warnings.push("Subject uses spammy punctuation or phrasing.");
-    }
-    const triggers = ["click here", "buy now", "act now", "limited time", "winner", "100% free", "no obligation", "risk-free", "guaranteed"];
-    const hits = triggers.filter((t) => body.includes(t));
-    if (hits.length) {
-      warnings.push(`Spam-trigger phrase${hits.length > 1 ? "s" : ""}: "${hits.slice(0, 3).join('", "')}".`);
-    }
-    if (composeBadRecipients.length > 0) {
-      const shown = composeBadRecipients.slice(0, 3).join(", ");
-      warnings.push(
-        `Can't verify ${composeBadRecipients.length === 1 ? "recipient" : "recipients"}: ${shown}${
-          composeBadRecipients.length > 3 ? "…" : ""
-        } — the address or its domain looks wrong.`
-      );
-    }
-    if (composeDeliverability && (!composeDeliverability.spfOk || !composeDeliverability.dmarcOk)) {
-      const gaps = [!composeDeliverability.spfOk && "SPF", !composeDeliverability.dmarcOk && "DMARC"].filter(Boolean).join(" & ");
-      warnings.push(`Sending domain is missing ${gaps} — this can hurt inbox placement (see Settings → Deliverability).`);
-    }
-    return warnings;
-  }, [composeSubject, composeBody, composeDeliverability, composeBadRecipients]);
 
   const rowKey = useCallback((message: MessageRow) => `${message.accountEmail}::${message.id}`, []);
 
@@ -859,64 +449,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       Only when every selected email is already read do we offer "Mark As Unread". */
   const selectionHasUnread =
     selectedMessageRows.length > 0 && selectedMessageRows.some((message) => message.unread);
-  const emptyAddContactForm = {
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    business: "",
-    website: "",
-    address: "",
-  };
-
-  const formatPhoneInput = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 10);
-    if (!digits) return "";
-    if (digits.length < 4) return `(${digits}`;
-    if (digits.length < 7) return `(${digits.slice(0, 3)})-${digits.slice(3)}`;
-    return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
-  };
-
-  const isPhoneValid = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return true;
-    const digits = trimmed.replace(/\D/g, "");
-    return digits.length === 10;
-  };
-
-  const isWebsiteValid = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return true;
-    return /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/[^\s]*)?$/i.test(trimmed);
-  };
-
-  const closeAddContactModal = () => {
-    setAddContactError("");
-    setAddContactFirstNameTouched(false);
-    setAddContactForm(emptyAddContactForm);
-    setIsAddContactModalOpen(false);
-  };
-
-  const closeEditContactModal = useCallback(() => {
-    if (editingContact) return;
-    setEditContactError("");
-    setEditingContactId("");
-    setEditContactTouched({
-      firstName: false,
-      email: false,
-      phone: false,
-      website: false,
-    });
-    setIsEditContactModalOpen(false);
-  }, [editingContact]);
-
-  const showSentToast = useCallback((message: string) => {
-    setSentToastMessage(message);
+  const showSentToast = useCallback((message: string, undo?: () => void) => {
+    setSentToast({ message, undo });
     if (sentToastTimerRef.current) clearTimeout(sentToastTimerRef.current);
+    // Undo toasts stay up longer — the whole point is giving a misclick time to be reversed.
     sentToastTimerRef.current = setTimeout(() => {
-      setSentToastMessage(null);
+      setSentToast(null);
       sentToastTimerRef.current = null;
-    }, 4500);
+    }, undo ? 6000 : 4500);
   }, []);
 
   useEffect(() => {
@@ -928,28 +468,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   useEffect(() => {
     selectedMessageIdRef.current = selectedMessageId;
   }, [selectedMessageId]);
-
-  useEffect(() => {
-    if (!isEditContactModalOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (editContactModalRef.current && !editContactModalRef.current.contains(event.target as Node)) {
-        closeEditContactModal();
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [closeEditContactModal, isEditContactModalOpen]);
-
-  const loadContactTags = useCallback(async () => {
-    try {
-      const result = await getJson("/api/contacts/tags");
-      if (!result.ok) return;
-      const payload = result.data as Record<string, unknown>;
-      setContactsTags(Array.isArray(payload?.tags) ? payload.tags : []);
-    } catch {
-      setContactsTags([]);
-    }
-  }, []);
 
   const loadProviderAccounts = useCallback(async () => {
     try {
@@ -973,526 +491,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setProviderAccounts([]);
     }
   }, []);
-
-  const loadContactVisibility = useCallback(async () => {
-    try {
-      const query = new URLSearchParams();
-      if (activeAccountForContacts) query.set("accountEmail", activeAccountForContacts);
-      const result = await getJson(`/api/contacts/visibility?${query.toString()}`);
-      if (!result.ok) return;
-      const payload = result.data as { visibility?: Record<string, unknown> };
-      const visibility = payload?.visibility || {};
-      setContactsVisibility({
-        showPhone: Boolean(visibility.showPhone ?? true),
-        showBusiness: Boolean(visibility.showBusiness ?? true),
-        showWebsite: Boolean(visibility.showWebsite ?? true),
-      });
-    } catch {
-      setContactsVisibility({
-        showPhone: true,
-        showBusiness: true,
-        showWebsite: true,
-      });
-    }
-  }, [activeAccountForContacts]);
-
-  const loadContacts = useCallback(async () => {
-    if (step !== "client" || activeModule !== "contacts") return;
-    // Reloads on every keystroke in the search box, so responses can land out of order and a stale
-    // one would leave the table showing results for a query the user has already moved past.
-    const requestId = ++loadContactsRequestRef.current;
-    const isStale = () => requestId !== loadContactsRequestRef.current;
-    setContactsLoading(true);
-    setContactsError("");
-    setSelectedContactIds([]);
-    try {
-      const query = new URLSearchParams({
-        limit: String(CONTACTS_PAGE_SIZE),
-        page: String(contactCurrentPage),
-      });
-      if (debouncedContactSearch) query.set("search", debouncedContactSearch);
-      if (contactTagFilter) query.set("tagIds", contactTagFilter);
-      if (contactSourceFilter) query.set("source", contactSourceFilter);
-      // Explicitly empty, not omitted: this list should show every client's contacts merged
-      // together regardless of whichever client the panel's picker has active, and an empty
-      // string here stops panelFetch from filling it back in with that active client's id (it
-      // only injects companyId when the param is entirely absent). A representative's own
-      // companyId still applies server-side no matter what this sends — only Vierra staff get
-      // the merged view. Writes (add/edit/delete/import/export) still go through panelFetch
-      // untouched, since those need one real target company.
-      query.set("companyId", "");
-      // no-store: this reloads right after create/edit/delete/tag writes, and the
-      // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
-      const response = await panelFetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.message || "Failed to load contacts.");
-      }
-      if (isStale()) return;
-      setContacts(Array.isArray(payload?.contacts) ? payload.contacts : []);
-      const pagination = payload?.pagination || {};
-      const total = Number(pagination.total || 0);
-      const totalPages = Number.isFinite(Number(pagination.totalPages))
-        ? Math.max(1, Number(pagination.totalPages))
-        : Math.max(1, Math.ceil(total / CONTACTS_PAGE_SIZE));
-      setContactsTotalCount(total);
-      setContactsTotalPages(totalPages);
-    } catch (error) {
-      if (isStale()) return;
-      setContacts([]);
-      setContactsTotalCount(0);
-      setContactsTotalPages(1);
-      setContactsError(error instanceof Error ? error.message : "Failed to load contacts.");
-    } finally {
-      if (!isStale()) setContactsLoading(false);
-    }
-  }, [activeModule, contactCurrentPage, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
-
-  const createContact = async () => {
-    const firstName = addContactForm.firstName.trim();
-    const email = addContactForm.email.trim();
-    const emailValid = EMAIL_REGEX.test(email);
-    const phoneValid = isPhoneValid(addContactForm.phone);
-    const websiteValid = isWebsiteValid(addContactForm.website);
-    if (!firstName) {
-      setAddContactFirstNameTouched(true);
-      setAddContactError("First name is required.");
-      return;
-    }
-    if (!email) {
-      setAddContactError("Contact email is required.");
-      return;
-    }
-    if (!emailValid) {
-      setAddContactError("Please enter a valid email address.");
-      return;
-    }
-    if (!phoneValid) {
-      setAddContactError("Please enter a valid phone number in the format (123)-456-7890.");
-      return;
-    }
-    if (!websiteValid) {
-      setAddContactError("Please enter a valid website URL (e.g., example.com or https://example.com).");
-      return;
-    }
-    setAddingContact(true);
-    setAddContactError("");
-    setContactsError("");
-    try {
-      const response = await panelFetch("/api/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountEmail: null,
-          email,
-          firstName,
-          lastName: addContactForm.lastName.trim(),
-          phone: addContactForm.phone.trim(),
-          business: addContactForm.business.trim(),
-          website: addContactForm.website.trim(),
-          address: addContactForm.address.trim(),
-        }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        setAddContactError(payload?.message || "Failed to create contact.");
-        return;
-      }
-      closeAddContactModal();
-      await loadContacts();
-    } catch (error) {
-      setAddContactError(error instanceof Error ? error.message : "Failed to create contact.");
-    } finally {
-      setAddingContact(false);
-    }
-  };
-
-  const editContact = async (contact: ContactRow) => {
-    setEditingContactId(contact.id);
-    setEditContactForm({
-      firstName: contact.firstName || "",
-      lastName: contact.lastName || "",
-      email: contact.email || "",
-      phone: formatPhoneInput(contact.phone || ""),
-      business: contact.business || "",
-      website: contact.website || "",
-      address: contact.address || "",
-    });
-    setEditContactTouched({
-      firstName: false,
-      email: false,
-      phone: false,
-      website: false,
-    });
-    setEditContactError("");
-    setIsEditContactModalOpen(true);
-  };
-
-  const deleteContact = async (contact: ContactRow) => {
-    setContactToDelete(contact);
-  };
-
-  const confirmDeleteContact = async () => {
-    if (!contactToDelete || deletingContact) return;
-    setDeletingContact(true);
-    setContactsError("");
-    try {
-      const response = await fetch(`/api/contacts/${encodeURIComponent(contactToDelete.id)}`, { method: "DELETE" });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || "Failed to delete contact.");
-      }
-      setContactToDelete(null);
-      await loadContacts();
-    } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Failed to delete contact.");
-    } finally {
-      setDeletingContact(false);
-    }
-  };
-
-  const toggleContactSelected = (contactId: string) => {
-    setSelectedContactIds((prev) =>
-      prev.includes(contactId) ? prev.filter((id) => id !== contactId) : [...prev, contactId]
-    );
-  };
-
-  const toggleAllContactsSelected = () => {
-    const visibleIds = contacts.map((c) => c.id);
-    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedContactIds.includes(id));
-    setSelectedContactIds(allSelected ? [] : visibleIds);
-  };
-
-  const confirmBulkDeleteContactsAction = async () => {
-    if (selectedContactIds.length === 0 || bulkContactActionLoading) return;
-    setBulkContactActionLoading(true);
-    setBulkContactActionError("");
-    try {
-      const response = await fetch("/api/contacts/bulk", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: selectedContactIds }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || "Failed to delete contacts.");
-      }
-      setSelectedContactIds([]);
-      setConfirmBulkDeleteContacts(false);
-      await loadContacts();
-    } catch (error) {
-      setBulkContactActionError(error instanceof Error ? error.message : "Failed to delete contacts.");
-    } finally {
-      setBulkContactActionLoading(false);
-    }
-  };
-
-  const bulkAddTagToSelected = async (tagId: string) => {
-    if (!tagId || selectedContactIds.length === 0) return;
-    setBulkContactActionLoading(true);
-    setBulkContactActionError("");
-    try {
-      const response = await fetch("/api/contacts/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: selectedContactIds, tagId }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || "Failed to tag contacts.");
-      }
-      await loadContacts();
-    } catch (error) {
-      setBulkContactActionError(error instanceof Error ? error.message : "Failed to tag contacts.");
-    } finally {
-      setBulkContactActionLoading(false);
-    }
-  };
-
-  const addTagToContact = async (contactId: string, tagId: string, reload = true) => {
-    if (!tagId) return;
-    await fetch(`/api/contacts/${encodeURIComponent(contactId)}/tags`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tagId }),
-    });
-    if (reload) {
-      await loadContacts();
-    }
-  };
-
-  const removeTagFromContact = async (contactId: string, tagId: string) => {
-    await fetch(`/api/contacts/${encodeURIComponent(contactId)}/tags`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tagId }),
-    });
-    await loadContacts();
-  };
-
-  const saveEditedContact = async () => {
-    const firstName = editContactForm.firstName.trim();
-    const email = editContactForm.email.trim();
-    const emailValid = EMAIL_REGEX.test(email);
-    const phoneValid = isPhoneValid(editContactForm.phone);
-    const websiteValid = isWebsiteValid(editContactForm.website);
-    if (!editingContactId) return;
-    if (!firstName) {
-      setEditContactTouched((prev) => ({ ...prev, firstName: true }));
-      setEditContactError("First name is required.");
-      return;
-    }
-    if (!email) {
-      setEditContactTouched((prev) => ({ ...prev, email: true }));
-      setEditContactError("Contact email is required.");
-      return;
-    }
-    if (!emailValid) {
-      setEditContactTouched((prev) => ({ ...prev, email: true }));
-      setEditContactError("Please enter a valid email address.");
-      return;
-    }
-    if (!phoneValid) {
-      setEditContactTouched((prev) => ({ ...prev, phone: true }));
-      setEditContactError("Please enter a valid phone number in the format (123)-456-7890.");
-      return;
-    }
-    if (!websiteValid) {
-      setEditContactTouched((prev) => ({ ...prev, website: true }));
-      setEditContactError("Please enter a valid website URL (e.g., example.com or https://example.com).");
-      return;
-    }
-    setEditingContact(true);
-    setEditContactError("");
-    try {
-      const response = await fetch(`/api/contacts/${encodeURIComponent(editingContactId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName,
-          lastName: editContactForm.lastName.trim(),
-          email,
-          phone: editContactForm.phone.trim(),
-          business: editContactForm.business.trim(),
-          website: editContactForm.website.trim(),
-          address: editContactForm.address.trim(),
-        }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || "Failed to update contact.");
-      }
-      closeEditContactModal();
-      await loadContacts();
-    } catch (error) {
-      setEditContactError(error instanceof Error ? error.message : "Failed to update contact.");
-    } finally {
-      setEditingContact(false);
-    }
-  };
-
-  const exportContactsCsv = async () => {
-    const query = new URLSearchParams();
-    if (contactSearch.trim()) query.set("search", contactSearch.trim());
-    if (contactTagFilter) query.set("tagIds", contactTagFilter);
-    if (contactSourceFilter) query.set("source", contactSourceFilter);
-    const response = await panelFetch(`/api/contacts/export?${query.toString()}`);
-    if (!response.ok) {
-      setContactsError("Failed to export contacts.");
-      return;
-    }
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "contacts.csv";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const mapImportRowErrors = (raw: unknown): ContactsImportIssueRow[] => {
-    if (!Array.isArray(raw)) return [];
-    return raw.map((row) => ({
-      lineNumber: Number((row as { lineNumber?: unknown })?.lineNumber) || 0,
-      firstName: String((row as { firstName?: unknown })?.firstName || ""),
-      lastName: String((row as { lastName?: unknown })?.lastName || ""),
-      email: String((row as { email?: unknown })?.email || ""),
-      phone: String((row as { phone?: unknown })?.phone || ""),
-      business: String((row as { business?: unknown })?.business || ""),
-      website: String((row as { website?: unknown })?.website || ""),
-      address: String((row as { address?: unknown })?.address || ""),
-      tags: String((row as { tags?: unknown })?.tags || ""),
-      reasons: Array.isArray((row as { reasons?: unknown })?.reasons) ? (row as { reasons: string[] }).reasons : [],
-    }));
-  };
-
-  const handleImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const csvText = await file.text();
-    setContactsError("");
-    setContactsImportSuccessOpen(false);
-    try {
-      const response = await panelFetch("/api/contacts/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountEmail: null,
-          csvText,
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const headerErrors = Array.isArray(payload?.headerErrors) ? payload.headerErrors : [];
-        const rowErrors = mapImportRowErrors(payload?.errors);
-        if (headerErrors.length > 0 || rowErrors.length > 0) {
-          setContactsImportIssuesModal({
-            open: true,
-            imported: Number(payload?.imported || 0),
-            skipped: Number(payload?.skipped || 0),
-            headerErrors,
-            rowErrors,
-          });
-          setContactsError("");
-        } else {
-          setContactsError(payload?.message || "Failed to import CSV.");
-        }
-        return;
-      }
-
-      const imported = Number(payload?.imported || 0);
-      const skipped = Number(payload?.skipped || 0);
-      const headerErrors = Array.isArray(payload?.headerErrors) ? payload.headerErrors : [];
-      const rowErrors = mapImportRowErrors(payload?.errors);
-
-      event.target.value = "";
-      await Promise.all([loadContacts(), loadContactTags()]);
-
-      if (headerErrors.length > 0 || rowErrors.length > 0 || skipped > 0) {
-        setContactsImportIssuesModal({
-          open: true,
-          imported,
-          skipped,
-          headerErrors,
-          rowErrors,
-        });
-      } else {
-        setContactsImportSuccessOpen(true);
-      }
-    } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Failed to import CSV.");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const updateIssueRowField = (lineNumber: number, field: keyof CsvContactRowWithMeta, value: string) => {
-    setContactsImportIssuesModal((prev) => ({
-      ...prev,
-      rowErrors: prev.rowErrors.map((row) => (row.lineNumber === lineNumber ? { ...row, [field]: value } : row)),
-    }));
-  };
-
-  const retryImportIssueRow = async (lineNumber: number) => {
-    const target = contactsImportIssuesModal.rowErrors.find((row) => row.lineNumber === lineNumber);
-    if (!target) return;
-    setContactsImportIssuesModal((prev) => ({
-      ...prev,
-      rowErrors: prev.rowErrors.map((row) => (row.lineNumber === lineNumber ? { ...row, saving: true } : row)),
-    }));
-    try {
-      const csvText = toContactsCsv([
-        {
-          firstName: target.firstName,
-          lastName: target.lastName,
-          email: target.email,
-          phone: target.phone,
-          business: target.business,
-          website: target.website,
-          address: target.address,
-          tags: target.tags,
-        },
-      ]);
-      const response = await panelFetch("/api/contacts/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountEmail: null, csvText }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      const stillFailing = mapImportRowErrors(payload?.errors);
-      const succeeded = response.ok && Number(payload?.imported || 0) > 0 && stillFailing.length === 0;
-
-      if (succeeded) {
-        let closedIssuesModal = false;
-        setContactsImportIssuesModal((prev) => {
-          const nextRowErrors = prev.rowErrors.filter((row) => row.lineNumber !== lineNumber);
-          const stillOpen = nextRowErrors.length > 0 || prev.headerErrors.length > 0;
-          closedIssuesModal = !stillOpen;
-          return {
-            ...prev,
-            imported: prev.imported + 1,
-            skipped: Math.max(0, prev.skipped - 1),
-            rowErrors: nextRowErrors,
-            open: stillOpen,
-          };
-        });
-        await Promise.all([loadContacts(), loadContactTags()]);
-        if (closedIssuesModal) {
-          setContactsImportSuccessOpen(true);
-        }
-      } else {
-        const reasons = stillFailing[0]?.reasons?.length ? stillFailing[0].reasons : ["Failed to import row."];
-        setContactsImportIssuesModal((prev) => ({
-          ...prev,
-          rowErrors: prev.rowErrors.map((row) =>
-            row.lineNumber === lineNumber ? { ...target, reasons, saving: false } : row
-          ),
-        }));
-      }
-    } catch (error) {
-      setContactsImportIssuesModal((prev) => ({
-        ...prev,
-        rowErrors: prev.rowErrors.map((row) =>
-          row.lineNumber === lineNumber
-            ? { ...row, saving: false, reasons: [error instanceof Error ? error.message : "Failed to import row."] }
-            : row
-        ),
-      }));
-    }
-  };
-
-  const retryAllIssueRows = async () => {
-    const lineNumbers = contactsImportIssuesModal.rowErrors.map((row) => row.lineNumber);
-    for (const lineNumber of lineNumbers) {
-      await retryImportIssueRow(lineNumber);
-    }
-  };
-
-  const syncFromGmailContacts = async () => {
-    if (selectedAccounts.length === 0) return;
-    setContactsError("");
-    setContactsLoading(true);
-    try {
-      for (const accountEmail of selectedAccounts) {
-        const response = await fetch("/api/gmail/contacts/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail }),
-        });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          throw new Error(payload?.message || `Sync failed for ${accountEmail}`);
-        }
-      }
-      await Promise.all([loadContacts(), loadContactTags()]);
-    } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Gmail contacts sync failed.");
-    } finally {
-      setContactsLoading(false);
-    }
-  };
 
   const formatDate = (timestamp: number, rawDate?: string) => {
     if (timestamp > 0) {
@@ -1544,13 +542,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     return { name: trimmed || "-", email: "" };
   };
 
-  const parseAddressList = (value: string) => {
-    return (value || "")
-      .split(",")
-      .map((item) => parseMailboxAddress(item))
-      .filter((item) => item.name || item.email);
-  };
-
   const selectedSenderIdentity = useMemo(() => {
     if (!selectedMessage) return null;
     const fallback = selectedMessage.fromRaw || selectedMessage.replyTo || selectedMessage.from;
@@ -1562,72 +553,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (!senderEmail) return null;
     return blockedSenders.find((entry) => entry.email.toLowerCase() === senderEmail) || null;
   }, [blockedSenders, selectedSenderIdentity?.email]);
-
-  const composeDraftStorageKey = useMemo(() => {
-    const account = (composeAccountEmail || selectedAccounts[0] || connectedAccounts[0]?.email || "default").toLowerCase();
-    return `popup:new:${account}`;
-  }, [composeAccountEmail, connectedAccounts, selectedAccounts]);
-  const effectiveComposeDraftStorageKey = composeActiveDraftKey || composeDraftStorageKey;
-
-  useEffect(() => {
-    if (!isComposeOpen || !composeAccountEmail) return;
-    let cancelled = false;
-    void fetch(`/api/gmail/templates?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
-      .then((r) => r.json())
-      .then((payload) => {
-        if (cancelled) return;
-        const list = Array.isArray(payload?.templates) ? payload.templates : [];
-        setComposeTemplates(list);
-      })
-      .catch(() => null);
-    void fetch(`/api/gmail/signatures?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
-      .then((r) => r.json())
-      .then((payload) => {
-        if (cancelled) return;
-        const list = Array.isArray(payload?.signatures) ? payload.signatures : [];
-        setComposeSignatures(list);
-        // Auto-insert the default signature into a brand-new compose only (flag set by
-        // openNewCompose). Guard on an empty body via the functional updater so we never clobber
-        // a reply/draft or text the user has already started typing while the fetch was in flight.
-        if (!composeInsertDefaultSigRef.current) return;
-        composeInsertDefaultSigRef.current = false;
-        const def = list.find((s: { isDefault?: boolean }) => s?.isDefault);
-        if (!def || (!def.signatureHtml && !def.signatureText)) return;
-        const escSig = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const sigHtml =
-          def.signatureHtml && def.signatureHtml.trim()
-            ? def.signatureHtml
-            : `<p>${escSig(def.signatureText || "").replace(/\n/g, "<br />")}</p>`;
-        setComposeBodyHtml((prev) => (prev && prev.trim() ? prev : `<p><br /></p><p><br /></p>${sigHtml}`));
-        setComposeBody((prev) => (prev && prev.trim() ? prev : `\n\n${def.signatureText || ""}`));
-      })
-      .catch(() => null);
-    return () => {
-      cancelled = true;
-    };
-  }, [isComposeOpen, composeAccountEmail]);
-
-  // Apply this inbox's read-receipt default once on a brand-new compose (flag set by
-  // openNewCompose); never on replies/drafts, and the user can still toggle it off after.
-  useEffect(() => {
-    if (!isComposeOpen || !composeAccountEmail || !composeReadReceiptDefaultRef.current) return;
-    composeReadReceiptDefaultRef.current = false;
-    let cancelled = false;
-    void fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
-      .then((r) => r.json())
-      .then((payload) => {
-        if (!cancelled && payload?.settings?.defaultReadReceipt) setRequestReceipt(true);
-      })
-      .catch(() => null);
-    return () => {
-      cancelled = true;
-    };
-  }, [isComposeOpen, composeAccountEmail]);
-
-  const inlineDraftStorageKey = useMemo(() => {
-    if (!inlineComposeMode || !selectedMessage) return "";
-    return `inline:${inlineComposeMode}:${selectedMessage.accountEmail.toLowerCase()}:${selectedMessage.id}`;
-  }, [inlineComposeMode, selectedMessage]);
 
   const formatIdentity = (value: string) => {
     const identity = parseMailboxAddress(value);
@@ -1701,22 +626,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .map((part) => part[0]?.toUpperCase() || "")
       .join("") || "?";
   };
-
-  const escapeHtml = (value: string) =>
-    value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-
-  const linkifyTextForHtml = (value: string) =>
-    escapeHtml(value)
-      .replace(
-        /(https?:\/\/[^\s<>"']+)/g,
-        '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#5B21B6;text-decoration:underline;">$1</a>'
-      )
-      .replace(/\n/g, "<br>");
 
   /**
    * Domain of the message being read, so images the sender hosts on its own domain aren't scored as
@@ -1963,6 +872,29 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadMailboxCounts();
   }, [loadMailboxCounts]);
 
+  const compose = useComposeWindow({
+    selectedMessage,
+    selectedMessageId,
+    threadMessages,
+    selectedMessageDetail,
+    selectedAccounts,
+    connectedAccounts,
+    providerAccounts,
+    activeModule,
+    loadMessagesRef,
+    loadMailboxCounts,
+    invalidateMessagesCache,
+    showSentToast,
+    setDetailError,
+    setSelectedMessageDetail,
+  });
+
+  const contacts = useContactsPanel({
+    step,
+    activeModule,
+    selectedAccounts,
+  });
+
   /**
    * Unstar every selected message. The Starred view is a label view, so removing the star is the
    * meaningful bulk action there (Move To / Archive are hidden for it). Rows are dropped from the
@@ -2153,29 +1085,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [debouncedSearch]);
 
   useEffect(() => {
-    if (step === "client" && activeModule === "contacts") {
-      loadContactTags();
-      loadContactVisibility();
-    }
-  }, [activeModule, loadContactTags, loadContactVisibility, step]);
-
-  // Debounce the contacts search box so typing doesn't fire a request per keystroke.
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedContactSearch(contactSearch.trim()), 400);
-    return () => clearTimeout(t);
-  }, [contactSearch]);
-
-  useEffect(() => {
-    if (step !== "client" || activeModule !== "contacts") return;
-    setContactCurrentPage(1);
-  }, [activeModule, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
-
-  useEffect(() => {
-    if (contactCurrentPage <= contactsTotalPages) return;
-    setContactCurrentPage(Math.max(1, contactsTotalPages));
-  }, [contactCurrentPage, contactsTotalPages]);
-
-  useEffect(() => {
     if (!moveMenuOpen) return;
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
       const targetNode = event.target as Node | null;
@@ -2235,26 +1144,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setSnoozeMenuOpen(false);
     setLabelMenuOpen(false);
   }, [activeModule, activeLabelId, viewMode, selectedMessageId, currentPage]);
-
-  useEffect(() => {
-    if (!contactFilterOpen) return;
-    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
-      const targetNode = event.target as Node | null;
-      if (!targetNode) return;
-      if (contactFilterMenuRef.current?.contains(targetNode)) return;
-      setContactFilterOpen(false);
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("touchstart", handleOutsideClick);
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-      document.removeEventListener("touchstart", handleOutsideClick);
-    };
-  }, [contactFilterOpen]);
-
-  useEffect(() => {
-    loadContacts();
-  }, [loadContacts]);
 
   // Deep link (e.g. from a Discord reply alert): once the inbox has loaded, auto-open the
   // linked conversation and switch to the reader. Matches by threadId and opens whichever
@@ -2549,29 +1438,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMessage?.id, selectedMessage?.accountEmail, viewMode]);
 
-  useEffect(() => {
-    setInlineComposeMode(null);
-    setInlineComposeTo("");
-    setInlineComposeSubject("");
-    setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
-    setInlineComposeThreadId("");
-    setInlineComposeInReplyTo("");
-    setInlineComposeReferences("");
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
-  }, [selectedMessageId]);
-
-  useEffect(() => {
-    if (!inlineComposeMode) return;
-    const timeout = window.setTimeout(() => {
-      inlineComposeRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, 80);
-    return () => window.clearTimeout(timeout);
-  }, [inlineComposeMode]);
-
   const loadBlockedSenders = useCallback(async () => {
     try {
       const response = await fetch("/api/gmail/blocked-senders");
@@ -2590,237 +1456,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadBlockedSenders();
   }, [loadBlockedSenders, selectedMessage?.accountEmail]);
 
-  useEffect(() => { composeEditVersion.current += 1; }, [composeTo, composeCc, composeBcc, composeSubject, composeBody, composeBodyHtml, composeAccountEmail]);
   usePageLeaveGuard();
-  useDraftGuard((isComposeOpen && Boolean(composeTo || composeSubject || composeBody || composeBodyHtml)) || Boolean(inlineComposeMode && inlineComposeIntroText), "Email draft", "email", sendingCompose || inlineComposeSending);
-
-  const saveLocalDraft = useCallback(async (key: string, draft: LocalEmailDraft, options?: { keepalive?: boolean }) => {
-    if (!key) return false;
-    const previous = draftSaveQueue.current.get(key);
-    const operation = (async () => {
-    if (previous) await previous;
-    setDraftSaveState("Saving draft...");
-    const response = await fetch("/api/gmail/drafts", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      keepalive: Boolean(options?.keepalive),
-      body: JSON.stringify({
-        draftKey: key,
-        accountEmail: draft.accountEmail || null,
-        to: draft.to,
-        cc: draft.cc || "",
-        bcc: draft.bcc || "",
-        showCc: Boolean(draft.showCc),
-        showBcc: Boolean(draft.showBcc),
-        subject: draft.subject || "",
-        bodyText: draft.bodyText || "",
-        bodyHtml: draft.bodyHtml || "",
-        previewHtml: draft.previewHtml || "",
-        threadId: draft.threadId || "",
-        inReplyTo: draft.inReplyTo || "",
-        references: draft.references || "",
-      }),
-    }).catch(() => null);
-    setDraftSaveState(response?.ok ? "Draft saved" : "Could not save draft. Keep this page open and retry.");
-    return Boolean(response?.ok);
-    })();
-    draftSaveQueue.current.set(key, operation);
-    const success = await operation;
-    if (draftSaveQueue.current.get(key) === operation) draftSaveQueue.current.delete(key);
-    return success;
-  }, []);
-
-  const clearLocalDraft = useCallback(async (key: string, options?: { keepalive?: boolean }) => {
-    if (!key) return;
-    const response = await fetch("/api/gmail/drafts", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      keepalive: Boolean(options?.keepalive),
-      body: JSON.stringify({ draftKey: key }),
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload?.message || "Failed to clear draft.");
-    }
-  }, []);
-
-  const flushDraftsNow = useCallback(async () => {
-    const writes: Promise<boolean>[] = [];
-    if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
-      // Recipients or a subject with no body still count — closing after typing only a
-      // "To" used to discard it, which reads as the composer losing your work.
-      const hasComposeContent =
-        composeBody.trim() ||
-        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim() ||
-        composeTo.trim() ||
-        composeSubject.trim();
-      if (hasComposeContent) {
-        writes.push(saveLocalDraft(
-          effectiveComposeDraftStorageKey,
-          {
-            to: composeTo,
-            cc: composeCc,
-            bcc: composeBcc,
-            showCc,
-            showBcc,
-            subject: composeSubject,
-            bodyText: composeBody,
-            bodyHtml: composeBodyHtml,
-            accountEmail: composeAccountEmail,
-            updatedAt: Date.now(),
-          },
-          { keepalive: true }
-        ));
-      }
-    }
-
-    if (!inlineComposeSending && inlineComposeMode && inlineDraftStorageKey) {
-      const hasInlineContent = inlineComposeIntroText.trim();
-      if (hasInlineContent) {
-        writes.push(saveLocalDraft(
-          inlineDraftStorageKey,
-          {
-            to: inlineComposeTo,
-            subject: inlineComposeSubject,
-            bodyText: inlineComposeIntroText,
-            bodyHtml: inlineComposeBodyHtml,
-            previewHtml: inlineComposePreviewHtml,
-            accountEmail: selectedMessage?.accountEmail,
-            threadId: inlineComposeThreadId,
-            inReplyTo: inlineComposeInReplyTo,
-            references: inlineComposeReferences,
-            updatedAt: Date.now(),
-          },
-          { keepalive: true }
-        ));
-      }
-    }
-    return (await Promise.all(writes)).every(Boolean);
-  }, [
-    composeAccountEmail,
-    composeBcc,
-    composeBody,
-    composeBodyHtml,
-    composeCc,
-    composeSubject,
-    composeTo,
-    effectiveComposeDraftStorageKey,
-    inlineComposeSending,
-    inlineComposeBodyHtml,
-    inlineComposeInReplyTo,
-    inlineComposeIntroText,
-    inlineComposeMode,
-    inlineComposePreviewHtml,
-    inlineComposeReferences,
-    inlineComposeSubject,
-    inlineComposeThreadId,
-    inlineComposeTo,
-    inlineDraftStorageKey,
-    isComposeOpen,
-    sendingCompose,
-    saveLocalDraft,
-    selectedMessage?.accountEmail,
-    showBcc,
-    showCc,
-  ]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handlePageLeave = () => {
-      flushDraftsNow();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        flushDraftsNow();
-      }
-    };
-    window.addEventListener("beforeunload", handlePageLeave);
-    window.addEventListener("pagehide", handlePageLeave);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      flushDraftsNow();
-      window.removeEventListener("beforeunload", handlePageLeave);
-      window.removeEventListener("pagehide", handlePageLeave);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [flushDraftsNow]);
-
-  useEffect(() => {
-    if (sendingCompose || !isComposeOpen || !effectiveComposeDraftStorageKey) return;
-    const hasContent =
-      composeBody.trim() ||
-      composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
-    const timeout = window.setTimeout(() => {
-      if (!hasContent) return;
-      void saveLocalDraft(effectiveComposeDraftStorageKey, {
-        to: composeTo,
-        cc: composeCc,
-        bcc: composeBcc,
-        showCc,
-        showBcc,
-        subject: composeSubject,
-        bodyText: composeBody,
-        bodyHtml: composeBodyHtml,
-        accountEmail: composeAccountEmail,
-        updatedAt: Date.now(),
-      });
-    }, 450);
-    return () => window.clearTimeout(timeout);
-  }, [
-    clearLocalDraft,
-    composeAccountEmail,
-    composeBcc,
-    composeBody,
-    composeBodyHtml,
-    composeCc,
-    composeActiveDraftKey,
-    composeDraftStorageKey,
-    composeSubject,
-    composeTo,
-    effectiveComposeDraftStorageKey,
-    isComposeOpen,
-    sendingCompose,
-    saveLocalDraft,
-    showBcc,
-    showCc,
-  ]);
-
-  useEffect(() => {
-    if (inlineComposeSending || !inlineComposeMode || !inlineDraftStorageKey) return;
-    const hasContent = inlineComposeIntroText.trim();
-    const timeout = window.setTimeout(() => {
-      if (!hasContent) return;
-      void saveLocalDraft(inlineDraftStorageKey, {
-        to: inlineComposeTo,
-        subject: inlineComposeSubject,
-        bodyText: inlineComposeIntroText,
-        bodyHtml: inlineComposeBodyHtml,
-        previewHtml: inlineComposePreviewHtml,
-        accountEmail: selectedMessage?.accountEmail,
-        threadId: inlineComposeThreadId,
-        inReplyTo: inlineComposeInReplyTo,
-        references: inlineComposeReferences,
-        updatedAt: Date.now(),
-      });
-    }, 450);
-    return () => window.clearTimeout(timeout);
-  }, [
-    clearLocalDraft,
-    inlineComposeBodyHtml,
-    inlineComposeBodyText,
-    inlineComposeInReplyTo,
-    inlineComposeIntroText,
-    inlineComposeMode,
-    inlineComposePreviewHtml,
-    inlineComposeReferences,
-    inlineComposeSubject,
-    inlineComposeThreadId,
-    inlineComposeTo,
-    inlineDraftStorageKey,
-    inlineComposeSending,
-    saveLocalDraft,
-    selectedMessage?.accountEmail,
-  ]);
+  useDraftGuard(compose.hasUnsavedChanges, "Email draft", "email", compose.isSending);
 
   const toggleRowSelection = (message: MessageRow) => {
     const key = rowKey(message);
@@ -2838,29 +1475,57 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setSelectedRows((prev) => Array.from(new Set([...prev, ...visibleRowKeys])));
   };
 
-  const openComposeDraftFromRow = (draftMessage: MessageRow) => {
-    const accountEmail =
-      draftMessage.accountEmail || selectedAccounts[0] || connectedAccounts[0]?.email || providerAccounts[0]?.accountEmail || "";
-    setComposeTo(draftMessage.toRaw || draftMessage.to || "");
-    setComposeCc(draftMessage.composeCc || "");
-    setComposeBcc(draftMessage.composeBcc || "");
-    setShowCc(Boolean(draftMessage.composeShowCc));
-    setShowBcc(Boolean(draftMessage.composeShowBcc));
-    setComposeSubject(draftMessage.subject || "");
-    setComposeBody(draftMessage.composeBodyText || "");
-    setComposeBodyHtml(draftMessage.composeBodyHtml || "");
-    setComposeAttachments([]);
-    setComposeFormattingToolbarOpen(false);
-    setComposeAccountEmail(accountEmail);
-    setComposeThreadId(draftMessage.threadId || "");
-    setComposeInReplyTo(draftMessage.messageIdHeader || "");
-    setComposeReferences(draftMessage.references || "");
-    setComposeActiveDraftKey(draftMessage.draftKey || "");
-    setComposeError("");
-    setComposeSuccess("");
-    setComposeExpanded(false);
-    setIsComposeOpen(true);
-  };
+  /**
+   * Reverses an archive or trash action from the undo toast. Mirrors applyAction's optimistic
+   * pattern but works off the exact rows the original action touched (captured before they were
+   * removed from the list) instead of the current selection, which is empty by the time the
+   * toast's Undo button is clicked.
+   */
+  const undoMailboxAction = useCallback(
+    async (action: "moveToInbox" | "untrash", rows: MessageRow[]) => {
+      if (rows.length === 0) return;
+      const keys = rows.map((message) => rowKey(message));
+      for (const key of keys) actionInFlightRef.current.add(key);
+      // Both reverse actions land back in the Inbox — matches the reconcile logic below, which
+      // treats "untrash" and "moveToInbox" identically for exactly this reason.
+      if (activeModule === "inbox") {
+        setMessages((prev) => {
+          const existing = new Set(prev.map((message) => rowKey(message)));
+          const restored = rows.filter((message) => !existing.has(rowKey(message)));
+          return [...restored, ...prev];
+        });
+      }
+      invalidateMessagesCache();
+      try {
+        const items = rows.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+        const response = await fetch("/api/gmail/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, items }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok && response.status !== 207) {
+          throw new Error(payload?.message || "Undo failed.");
+        }
+        const results = Array.isArray(payload?.results) ? payload.results : [];
+        const failures = results.filter((result: any) => result && result.ok === false);
+        if (failures.length > 0) {
+          throw new Error(String(failures[0]?.error || "Gmail refused the undo."));
+        }
+        void loadMailboxCounts();
+      } catch (error) {
+        // The optimistic restore didn't actually happen — pull the rows back out rather than
+        // leave the list showing messages Gmail never moved.
+        const keySet = new Set(keys);
+        setMessages((prev) => prev.filter((message) => !keySet.has(rowKey(message))));
+        invalidateMessagesCache();
+        setActionError(error instanceof Error ? error.message : "Undo failed.");
+      } finally {
+        for (const key of keys) actionInFlightRef.current.delete(key);
+      }
+    },
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey]
+  );
 
   const applyAction = useCallback(
     async (
@@ -3078,6 +1743,28 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         // Gmail's own totals now, so deriving them from the visible page here would also have
         // re-capped them at one page's worth.
         void loadMailboxCounts();
+
+        // Archive and trash are the two destructive-but-reversible actions (permanent delete
+        // already gets its own confirm dialog, so it doesn't need an undo). Only offer it once
+        // Gmail has actually confirmed success — undoing an action that never happened would
+        // just misfire a no-op moveToInbox/untrash against messages that were never moved.
+        if ((action === "archive" || action === "trash" || action === "moveToTrash") && hasResults) {
+          const undoneRows = gmailRows.filter((message) =>
+            successfulKeys.has(`${message.accountEmail.toLowerCase()}::${message.id}`)
+          );
+          if (undoneRows.length > 0) {
+            const reverseAction = action === "archive" ? "moveToInbox" : "untrash";
+            const label =
+              action === "archive"
+                ? undoneRows.length === 1
+                  ? "Archived"
+                  : `Archived ${undoneRows.length} messages`
+                : undoneRows.length === 1
+                  ? "Moved to Trash"
+                  : `Moved ${undoneRows.length} messages to Trash`;
+            showSentToast(label, () => undoMailboxAction(reverseAction, undoneRows));
+          }
+        }
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
@@ -3087,9 +1774,39 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setActionLoading(false);
       }
     },
-    [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey, selectedMessageRows, selectedRows, showSentToast, undoMailboxAction]
   );
 
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const hasOpenMessage = viewMode === "message" && Boolean(selectedMessage);
+  useKeyboardShortcuts(
+    {
+      hasOpenMessage,
+      canActOnSelection: hasOpenMessage || hasSelectedEmails,
+      onArchive: () => void applyAction("archive"),
+      onTrash: () => void applyAction(deletesPermanently ? "deletePermanently" : "trash"),
+      onMarkRead: () => void applyAction("markRead"),
+      onMarkUnread: () => void applyAction("markUnread"),
+      onToggleStar: () => {
+        if (selectedMessage) void toggleStar(selectedMessage);
+      },
+      onCompose: () => void compose.openNewCompose(),
+      onReply: () => void compose.openReplyCompose(),
+      onReplyAll: () => void compose.openReplyAllCompose(),
+      onForward: () => void compose.openForwardCompose(),
+      onClose: () => {
+        if (viewMode === "message") {
+          setViewMode("list");
+          setSelectedMessageId("");
+        }
+      },
+      onShowHelp: () => setShowShortcutsHelp((prev) => !prev),
+    },
+    // Disabled entirely while a compose window is open — the editable-focus guard alone doesn't
+    // cover every element inside compose (its own buttons, toolbars), so a shortcut key pressed
+    // right after clicking one of those could still leak through to the mailbox underneath it.
+    !compose.isComposeOpen
+  );
 
   // Snooze the selected messages until a preset time; the inbound cron re-surfaces them.
   const snoozeSelected = async (preset: "later" | "tomorrow" | "nextweek") => {
@@ -3262,14 +1979,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     [moduleOrder, persistModuleOrder]
   );
 
-  /** Mailbox destinations a message can be dropped onto. */
-  const MESSAGE_DROP_ACTIONS: Record<string, "moveToInbox" | "moveToSpam" | "moveToTrash" | "archive"> = useMemo(
-    () => ({ inbox: "moveToInbox", spam: "moveToSpam", trash: "moveToTrash", archive: "archive" }),
-    []
-  );
-
   /** Drop the dragged messages onto a mailbox module or a label. */
   const dropMessagesOn = useCallback(
+    // react-hooks/preserve-manual-memoization: the compiler can no longer prove this useCallback's
+    // memoization is safe to preserve after the contacts module was extracted out of this component
+    // (unrelated code, upstream) — the body and its deps are unchanged and correct; the compiler
+    // just skips its own optimization pass here and falls back to this manual memoization as-is.
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     async (destination: string) => {
       const rows = draggedMessagesRef.current.filter((message) => !message.isComposeDraft);
       draggedMessagesRef.current = [];
@@ -3302,10 +2018,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     },
     [
-      MESSAGE_DROP_ACTIONS,
       activeModule,
       applyLabelToSelection,
       loadMailboxCounts,
+      // eslint-disable-next-line react-hooks/preserve-manual-memoization -- see note above dropMessagesOn
       removeRowsLocally,
     ]
   );
@@ -3377,186 +2093,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .catch(() => setActionError("Failed to move the message."));
   };
 
-  /**
-   * Open the inline composer as a reply, with everything a reply shares: the Re: subject, the
-   * threading headers, and a cleared body.
-   *
-   * Reply and Reply all differ only in the recipient list. They were two copies of this, which is
-   * why the References fix — the parent Message-ID that was missing from the chain — had to be
-   * applied twice and could have been applied to only one.
-   */
-  const beginInlineReply = (mode: "reply" | "replyAll", to: string) => {
-    if (!selectedMessage) return;
-    const latest = threadMessages[threadMessages.length - 1];
-    setInlineComposeMode(mode);
-    setInlineComposeIntroHtml("");
-    setInlineComposeCc("");
-    setInlineComposeBcc("");
-    setInlineShowCc(false);
-    setInlineShowBcc(false);
-    setInlineToEditing(false);
-    setInlineShowFormatting(false);
-    setInlineMoreOpen(false);
-    setInlineComposeTo(to);
-    setInlineComposeSubject(
-      /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
-    );
-    setInlineComposeIntroText("");
-    // Quote the message being replied to, as Gmail does. This used to be cleared, so a reply
-    // carried none of the original AND the "⋯" that reveals it had nothing to show, which is
-    // why the control looked missing — it was rendering conditionally on an always-empty value.
-    {
-      const sourceHtml = latest?.bodyHtml || selectedMessageDetail?.bodyHtml || "";
-      const sourceText = latest?.bodyText || selectedMessageDetail?.bodyText || selectedMessage.snippet || "";
-      const quotedFrom = formatIdentity(latest?.fromRaw || selectedMessage.fromRaw || selectedMessage.from);
-      const quotedDate = formatDetailedDate(latest?.timestamp || selectedMessage.timestamp, latest?.date || selectedMessage.date);
-      const safeHtml = sourceHtml
-        ? sanitizeHtml(sourceHtml)
-        : `<div style="white-space:pre-wrap;">${escapeHtml(sourceText)}</div>`;
-      const quotedHtml = `<div style="border-left:2px solid #D1D5DB;padding-left:12px;margin-top:8px;color:#4B5563;">
-      <p style="font-size:12px;margin:0 0 10px;">On ${escapeHtml(quotedDate)}, ${escapeHtml(quotedFrom)} wrote:</p>
-      <div>${safeHtml}</div>
-    </div>`;
-      setInlineComposeBodyText(`\n\nOn ${quotedDate}, ${quotedFrom} wrote:\n${sourceText}`);
-      setInlineComposeBodyHtml(quotedHtml);
-      setInlineComposePreviewHtml(quotedHtml);
-    }
-    setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
-    setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(
-      buildReplyReferences(
-        latest?.references || selectedMessage.references,
-        latest?.messageIdHeader || selectedMessage.messageIdHeader
-      )
-    );
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
-  };
-
-  /** The address a reply goes to: Reply-To when the sender set one, otherwise who it came from. */
-  const replyRecipient = () => {
-    if (!selectedMessage) return "";
-    const latest = threadMessages[threadMessages.length - 1];
-    return parseMailboxAddress(
-      latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from
-    ).email;
-  };
-
-  const openReplyCompose = () => {
-    if (!selectedMessage) return;
-    beginInlineReply("reply", replyRecipient());
-  };
-
-  const openReplyAllCompose = () => {
-    if (!selectedMessage) return;
-    const latest = threadMessages[threadMessages.length - 1];
-    const toList = parseAddressList(latest?.toRaw || selectedMessage.toRaw || selectedMessage.to);
-    // Everyone on the original, deduped, with the sender first.
-    const uniqueEmails = Array.from(
-      new Set([replyRecipient(), ...toList.map((entry) => entry.email)].filter(Boolean))
-    );
-    beginInlineReply("replyAll", uniqueEmails.join(", "));
-  };
-
-  const openForwardCompose = () => {
-    if (!selectedMessage) return;
-    const latest = threadMessages[threadMessages.length - 1];
-    void clearLocalDraft(`inline:forward:${selectedMessage.accountEmail.toLowerCase()}:${selectedMessage.id}`).catch(() => null);
-    const sourceHtml = latest?.bodyHtml || selectedMessageDetail?.bodyHtml || "";
-    const sourceText = latest?.bodyText || selectedMessageDetail?.bodyText || selectedMessage.snippet || "";
-    const prefixed = /^fwd:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Fwd: ${selectedMessage.subject || ""}`;
-    const originalFrom = formatIdentity(latest?.fromRaw || selectedMessage.fromRaw || selectedMessage.from);
-    const originalTo = formatIdentity(latest?.toRaw || selectedMessage.toRaw || selectedMessage.to);
-    const originalDate = formatDetailedDate(latest?.timestamp || selectedMessage.timestamp, latest?.date || selectedMessage.date);
-    const sourceHtmlSafe = sourceHtml ? sanitizeHtml(sourceHtml) : `<div style="white-space:pre-wrap;">${escapeHtml(sourceText)}</div>`;
-    const previewHtml = `<div style="border-left:2px solid #D1D5DB;padding-left:12px;margin-top:8px;color:#4B5563;">
-      <p style="font-size:12px;margin:0 0 4px;"><strong>From:</strong> ${escapeHtml(originalFrom)}</p>
-      <p style="font-size:12px;margin:0 0 4px;"><strong>To:</strong> ${escapeHtml(originalTo)}</p>
-      <p style="font-size:12px;margin:0 0 4px;"><strong>Date:</strong> ${escapeHtml(originalDate)}</p>
-      <p style="font-size:12px;margin:0 0 10px;"><strong>Subject:</strong> ${escapeHtml(selectedMessage.subject || "(No Subject)")}</p>
-      <div>${sourceHtmlSafe}</div>
-    </div>`;
-    const forwardedText = `---------- Forwarded message ----------
-From: ${originalFrom}
-To: ${originalTo}
-Date: ${originalDate}
-Subject: ${selectedMessage.subject || "(No Subject)"}
-
-${sourceText}`;
-    setInlineComposeMode("forward");
-    setInlineComposeTo("");
-    setInlineComposeSubject(prefixed);
-    setInlineComposeIntroText("");
-    setInlineComposeBodyText(forwardedText);
-    setInlineComposeBodyHtml(previewHtml);
-    setInlineComposePreviewHtml(previewHtml);
-    setInlineComposeThreadId("");
-    setInlineComposeInReplyTo("");
-    setInlineComposeReferences("");
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
-  };
-
-  const sendInlineCompose = async () => {
-    if (!selectedMessage || !inlineComposeTo.trim() || inlineComposeSending) return;
-    const intro = inlineComposeIntroText.trim();
-    const textBody = intro ? `${intro}\n\n${inlineComposeBodyText}` : inlineComposeBodyText || intro;
-    if (!textBody.trim()) return;
-    const inlineCcError = validateRecipientCsv("Cc", inlineComposeCc);
-    const inlineBccError = validateRecipientCsv("Bcc", inlineComposeBcc);
-    if (inlineCcError || inlineBccError) {
-      setInlineComposeError(inlineCcError || inlineBccError || "");
-      return;
-    }
-    // The editor's own markup wins when it has any; linkified plain text is the fallback for a
-    // draft restored before the rich editor mounted.
-    const introRich = inlineComposeIntroHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim()
-      ? inlineComposeIntroHtml
-      : "";
-    const introHtml = introRich ? `${introRich}<br>` : intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
-    const htmlBody = inlineComposeBodyHtml ? `${introHtml}${inlineComposeBodyHtml}` : introHtml || linkifyTextForHtml(textBody);
-
-    setInlineComposeSending(true);
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
-    try {
-      const response = await sendPanelEmail({
-          accountEmail: selectedMessage.accountEmail,
-          to: inlineComposeTo.trim(),
-          cc: inlineComposeCc.trim() || undefined,
-          bcc: inlineComposeBcc.trim() || undefined,
-          subject: inlineComposeSubject.trim(),
-          body: textBody,
-          bodyHtml: htmlBody,
-          threadId: inlineComposeThreadId || undefined,
-          inReplyTo: inlineComposeInReplyTo || undefined,
-          references: inlineComposeReferences || undefined,
-          draftKey: inlineDraftStorageKey || undefined,
-          providerAccountId:
-            providerAccounts.find((entry) => entry.accountEmail === selectedMessage.accountEmail.toLowerCase())?.id || undefined,
-        });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload?.ok !== true) {
-        throw new Error(payload?.message || "Failed to send email.");
-      }
-      if (selectedMessage && inlineComposeMode) {
-        await clearLocalDraft(`inline:${inlineComposeMode}:${selectedMessage.accountEmail.toLowerCase()}:${selectedMessage.id}`).catch(
-          () => null
-        );
-      }
-      showSentToast("Message Sent");
-      setInlineComposeMode(null);
-      invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts()]);
-      setDetailError("");
-      setSelectedMessageDetail(null);
-    } catch (error) {
-      setInlineComposeError(error instanceof Error ? error.message : "Failed to send email.");
-    } finally {
-      setInlineComposeSending(false);
-    }
-  };
-
   const blockSelectedSender = async () => {
     if (!selectedMessage) return;
     const identity = parseMailboxAddress(selectedMessageDetail?.fromRaw || selectedMessage.fromRaw || selectedMessage.replyTo || selectedMessage.from);
@@ -3599,41 +2135,6 @@ ${sourceText}`;
     }
   };
 
-  const openNewCompose = () => {
-    const defaultAccount =
-      selectedAccounts[0] || connectedAccounts[0]?.email || providerAccounts[0]?.accountEmail || "";
-    setComposeTo("");
-    setComposeCc("");
-    setComposeBcc("");
-    setShowCc(false);
-    setShowBcc(false);
-    setComposeSubject("");
-    setComposeBody("");
-    setComposeBodyHtml("");
-    setComposeAttachments([]);
-    setComposeMoreOpen(false);
-    setArtemisRewriteOpen(false);
-    setComposeFormattingToolbarOpen(false);
-    setScheduleAt("");
-    setScheduleOpen(false);
-    setConfidentialOn(false);
-    setConfidentialPasscode("");
-    setConfidentialOpen(false);
-    setRequestReceipt(false);
-    composeReadReceiptDefaultRef.current = true;
-    setComposeAccountEmail(defaultAccount);
-    setComposeThreadId("");
-    setComposeInReplyTo("");
-    setComposeReferences("");
-    setComposeActiveDraftKey("");
-    setComposeError("");
-    setComposeSuccess("");
-    setComposeExpanded(false);
-    // Ask the signatures effect to drop in this account's default signature once it loads.
-    composeInsertDefaultSigRef.current = true;
-    setIsComposeOpen(true);
-  };
-
   const loadLabels = useCallback(async () => {
     const primary = selectedAccounts[0];
     if (step !== "client" || !primary) {
@@ -3652,60 +2153,6 @@ ${sourceText}`;
   useEffect(() => {
     loadLabels();
   }, [loadLabels]);
-
-  /**
-   * Load send-as identities for every connected mailbox, not just the active one.
-   *
-   * These used to be fetched for composeAccountEmail alone, which made aliases undiscoverable:
-   * opening compose on a mailbox with no aliases showed none, and the only way to reach an
-   * alias on another mailbox was to already know it was there and switch accounts first. Now
-   * every address the user can legitimately send from is in the list up front, each tagged with
-   * the mailbox that owns it (Gmail rejects sending as an alias through a mailbox that doesn't).
-   */
-  const composeAliasAccountsKey = useMemo(
-    () => (selectedAccounts.length > 0 ? selectedAccounts : connectedAccounts.map((a) => a.email)).join(","),
-    [selectedAccounts, connectedAccounts]
-  );
-  useEffect(() => {
-    if (!isComposeOpen) return;
-    const accounts = composeAliasAccountsKey.split(",").filter(Boolean);
-    if (accounts.length === 0) return;
-    let cancelled = false;
-    Promise.all(
-      accounts.map(async (accountEmail) => {
-        const response = await fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(accountEmail)}`);
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(`${accountEmail}: ${payload?.message || "failed to load send-as addresses"}`);
-        }
-        const aliases: Array<{ email: string; displayName: string; isPrimary: boolean }> = Array.isArray(
-          payload?.aliases
-        )
-          ? payload.aliases
-          : [];
-        return aliases.map((alias) => ({ ...alias, accountEmail }));
-      })
-    )
-      .then((perAccount) => {
-        if (!cancelled) setComposeAliases(perAccount.flat());
-      })
-      // A failure used to be indistinguishable from "this account has no aliases" — both ended
-      // as an empty list — so a broken fetch looked like the feature not existing.
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setComposeAliases([]);
-        setComposeError(
-          `Couldn't load your send-as addresses: ${error instanceof Error ? error.message : "unknown error"}`
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isComposeOpen, composeAliasAccountsKey]);
-
-  useEffect(() => {
-    if (isComposeOpen && composeAccountEmail) setComposeFrom(composeAccountEmail);
-  }, [isComposeOpen, composeAccountEmail]);
 
   const openLabel = (label: { id: string; name: string }) => {
     setActiveLabelId(label.id);
@@ -3825,432 +2272,12 @@ ${sourceText}`;
     }
   };
 
-  const getArtemisTone = () => {
-    try {
-      const raw = window.localStorage.getItem("artemis-prefs");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.tone) return String(parsed.tone);
-      }
-    } catch {
-      /* ignore */
-    }
-    return "professional and friendly";
-  };
-
-  const handleArtemisDraft = () => {
-    if (artemisDrafting) return;
-    setArtemisPromptOpen(true);
-  };
-
-  /**
-   * Ask Artemis for body text and put the result in the composer.
-   *
-   * Drafting and rewriting were the same twenty lines twice over, differing only in the endpoint,
-   * the request body and the error wording — including their own private copies of the
-   * plain-text-to-HTML conversion, which is the part that would quietly diverge.
-   */
-  const runArtemis = async (endpoint: string, body: Record<string, unknown>, failureMessage: string) => {
-    setArtemisDrafting(true);
-    setComposeError("");
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || failureMessage);
-      const text = String(payload?.text || "").trim();
-      if (!text) return;
-      setComposeBody(text);
-      setComposeBodyHtml(`<p>${escapeHtml(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-    } catch (error) {
-      setComposeError(error instanceof Error ? error.message : "Artemis error.");
-    } finally {
-      setArtemisDrafting(false);
-    }
-  };
-
-  const runArtemisDraft = async (intent: string) => {
-    if (!intent.trim() || artemisDrafting) return;
-    setArtemisPromptOpen(false);
-    await runArtemis("/api/ai/compose", { intent: intent.trim(), tone: getArtemisTone() }, "Artemis couldn't draft that.");
-  };
-
-  const handleArtemisRewrite = async (mode: string) => {
-    setArtemisRewriteOpen(false);
-    const current = (composeBody || "").trim();
-    if (!current || artemisDrafting) return;
-    await runArtemis("/api/ai/rewrite", { text: current, mode }, "Artemis couldn't rewrite that.");
-  };
-
-  /**
-   * The send request body. Extracted so the undo window can hold the exact same payload and flush
-   * it if the page goes away mid-countdown.
-   */
-  const buildSendPayload = () => ({
-          accountEmail: composeAccountEmail,
-          from: composeFrom && composeFrom !== composeAccountEmail ? composeFrom : undefined,
-          to: composeTo.trim(),
-          cc: composeCc.trim(),
-          bcc: composeBcc.trim(),
-          subject: composeSubject.trim(),
-          body: composeBody.trim(),
-          bodyHtml: composeBodyHtml.trim(),
-          threadId: composeThreadId || undefined,
-          inReplyTo: composeInReplyTo || undefined,
-          references: composeReferences || undefined,
-          scheduledAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
-          confidential: confidentialOn
-            ? { expiry: confidentialExpiry, passcode: confidentialPasscode.trim() || undefined }
-            : undefined,
-          requestReceipt: requestReceipt || undefined,
-          draftKey: effectiveComposeDraftStorageKey || undefined,
-          providerAccountId:
-            providerAccounts.find((entry) => entry.accountEmail === composeAccountEmail.toLowerCase())?.id || undefined,
-          attachments: composeAttachments.map((a) => ({
-            filename: a.filename,
-            contentType: a.contentType,
-            contentBase64: a.contentBase64,
-          })),
-  });
-
-  const performSendCompose = async () => {
-    // Being sent now, so there is nothing left for the unload path to flush.
-    pendingSendBodyRef.current = null;
-    setSendingCompose(true);
-    setComposeError("");
-    setComposeSuccess("");
-    try {
-      const response = await sendPanelEmail(buildSendPayload());
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload?.ok !== true) {
-        throw new Error(payload?.message || "Failed to send email.");
-      }
-      if (composeActiveDraftKey && composeActiveDraftKey !== composeDraftStorageKey) {
-        await clearLocalDraft(composeActiveDraftKey).catch(() => null);
-      }
-      await clearLocalDraft(composeDraftStorageKey).catch(() => null);
-      setComposeActiveDraftKey("");
-      setComposeTo("");
-      setComposeCc("");
-      setComposeBcc("");
-      setShowCc(false);
-      setShowBcc(false);
-      setComposeSubject("");
-      setComposeBody("");
-      setComposeBodyHtml("");
-      setComposeAttachments([]);
-      setIsComposeOpen(false);
-      if (payload?.scheduled) {
-        const when = payload?.scheduledAt ? new Date(payload.scheduledAt) : null;
-        showSentToast(
-          when
-            ? `Send scheduled for ${when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
-            : "Send scheduled"
-        );
-      } else {
-        showSentToast("Message Sent");
-      }
-      setScheduleAt("");
-      setScheduleOpen(false);
-      setConfidentialOn(false);
-      setConfidentialPasscode("");
-      setConfidentialOpen(false);
-      setRequestReceipt(false);
-      if (activeModule === "sent" || activeModule === "drafts") {
-        invalidateMessagesCache();
-        void Promise.all([loadMessages(), loadMailboxCounts()]);
-      } else {
-        void loadMailboxCounts();
-      }
-    } catch (error) {
-      setComposeError(error instanceof Error ? error.message : "Failed to send email.");
-    } finally {
-      setSendingCompose(false);
-    }
-  };
-
-  const cancelUndoSend = () => {
-    // Undo is the one path that genuinely discards the pending send.
-    pendingSendBodyRef.current = null;
-    if (undoSendTimeoutRef.current) {
-      clearTimeout(undoSendTimeoutRef.current);
-      undoSendTimeoutRef.current = null;
-    }
-    if (undoCountdownRef.current) {
-      clearInterval(undoCountdownRef.current);
-      undoCountdownRef.current = null;
-    }
-    setUndoCountdown(null);
-  };
-
-  // Closing/discarding the composer must abort any in-flight undo-send window. The Undo banner
-  // lives inside this modal, so once it's closed there's no way to cancel — leaving the timer
-  // running would send a message the user just tried to abort (and could clobber a fresh draft).
-  const closeCompose = async () => {
-    if (sendingCompose || composeClosePending.current) return;
-    composeClosePending.current = true;
-    const version = composeEditVersion.current;
-    cancelUndoSend();
-    // The autosave is debounced 450ms and its cleanup cancels the pending write, so closing
-    // right after a keystroke dropped those edits. Flush synchronously first, then resync the
-    // Drafts badge so the count reflects a draft created by this close.
-    const saved = await flushDraftsNow();
-    composeClosePending.current = false;
-    if (!saved || version !== composeEditVersion.current) return;
-    setIsComposeOpen(false);
-    void loadMailboxCounts();
-    // Closing a compose can create, update or empty a draft, so the cached Drafts page is now
-    // stale. Only the badge was refreshed before, which left the Drafts LIST showing the old
-    // contents until a manual refresh. Drop the cache and, if that list is on screen, refetch it.
-    invalidateMessagesCache();
-    if (activeModule === "drafts") void loadMessages();
-  };
-
-  // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
-  const handleSendCompose = () => {
-    const strippedHtml = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
-    const hasBody = Boolean(composeBody.trim() || strippedHtml);
-    if (!composeTo.trim() || !hasBody || !composeAccountEmail || sendingCompose || undoCountdown !== null) return;
-    const ccErr = validateRecipientCsv("Cc", composeCc);
-    const bccErr = validateRecipientCsv("Bcc", composeBcc);
-    if (ccErr || bccErr) {
-      setComposeError(ccErr || bccErr || "");
-      return;
-    }
-    // Scheduling replaces the undo-send window — queue it server-side directly.
-    if (scheduleAt) {
-      setComposeError("");
-      void performSendCompose();
-      return;
-    }
-    let delay = 5;
-    try {
-      const raw = window.localStorage.getItem("email-undo-delay");
-      if (raw != null) {
-        const parsed = Number(raw);
-        if (Number.isFinite(parsed)) delay = Math.max(0, Math.min(30, parsed));
-      }
-    } catch {
-      /* ignore */
-    }
-    if (delay === 0) {
-      void performSendCompose();
-      return;
-    }
-    setComposeError("");
-    setUndoCountdown(delay);
-    try { pendingSendBodyRef.current = JSON.stringify(prepareSendRequest(buildSendPayload())); } catch (error) { cancelUndoSend(); setComposeError(error instanceof Error ? error.message : "Could not prepare send"); return; }
-    undoSendTimeoutRef.current = setTimeout(() => {
-      cancelUndoSend();
-      void performSendCompose();
-    }, delay * 1000);
-    undoCountdownRef.current = setInterval(() => {
-      setUndoCountdown((prev) => (prev && prev > 1 ? prev - 1 : prev));
-    }, 1000);
-  };
-
-  /**
-   * Send anything still inside its undo window when the page goes away.
-   *
-   * sendBeacon is built for exactly this and survives unload, where a normal fetch is cancelled. It
-   * caps the payload at roughly 64KB, so a message with attachments can be too big to flush — in
-   * that case beforeunload asks the user to stay rather than losing it silently. The user pressed
-   * Send, so completing the send is the expected outcome of leaving; only undo cancels it.
-   */
-  useEffect(() => {
-    const flushPendingSend = () => {
-      const body = pendingSendBodyRef.current;
-      if (!body) return true;
-      try {
-        const sent = navigator.sendBeacon?.(
-          "/api/gmail/send",
-          new Blob([body], { type: "application/json" })
-        );
-        if (sent) {
-          pendingSendBodyRef.current = null;
-          return true;
-        }
-      } catch {
-        /* fall through to reporting that it could not be flushed */
-      }
-      return false;
-    };
-
-    const handlePageHide = () => {
-      flushPendingSend();
-    };
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!pendingSendBodyRef.current) return;
-      if (flushPendingSend()) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("pagehide", handlePageHide);
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      // Unmounting mid-countdown is a navigation away, not an undo: flush rather than drop.
-      flushPendingSend();
-      if (undoSendTimeoutRef.current) clearTimeout(undoSendTimeoutRef.current);
-      if (undoCountdownRef.current) clearInterval(undoCountdownRef.current);
-    };
-  }, []);
-
-  const composeHasMeaningfulBody = useMemo(() => {
-    const stripped = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
-    return Boolean(composeBody.trim() || stripped);
-  }, [composeBody, composeBodyHtml]);
-
-  const addComposeAttachmentsFromFiles = useCallback(async (fileList: FileList | null) => {
-    if (!fileList?.length) return;
-    const additions: Array<{ id: string; filename: string; contentType: string; contentBase64: string }> = [];
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList.item(i);
-      if (!file) continue;
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      const comma = dataUrl.indexOf(",");
-      const contentBase64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-      additions.push({
-        id: `${Date.now()}-${i}-${file.name}`,
-        filename: file.name,
-        contentType: file.type || "application/octet-stream",
-        contentBase64,
-      });
-    }
-    // Reject up-front with a clear message rather than letting an oversized JSON body hit the API's
-    // size limit and come back as an opaque "Failed to send." (NOTE: keep this at or below the real
-    // platform request-body limit — Netlify functions cap well under the 24 MB app-level cap.)
-    const decodedBytes = (b64: string) => Math.floor((b64.length * 3) / 4);
-    const currentBytes = composeAttachments.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
-    const additionBytes = additions.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
-    if (currentBytes + additionBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
-      setComposeError(
-        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — ` +
-          `send a link instead, or split them across messages.`
-      );
-      return;
-    }
-    setComposeAttachments((prev) => [...prev, ...additions]);
-  }, [composeAttachments]);
-
-  const toggleBookingMenu = useCallback(async () => {
-    setBookingMenuOpen((prev) => !prev);
-    try {
-      const r = await fetch("/api/booking/links");
-      const d = await r.json().catch(() => ({}));
-      const rows = Array.isArray(d?.links) ? d.links : [];
-      setComposeBookingLinks(
-        rows
-          .filter((l: { active?: boolean }) => l.active !== false)
-          .map((l: { id: string; slug: string; title: string }) => ({ id: l.id, slug: l.slug, title: l.title }))
-      );
-    } catch {
-      /* keep whatever we had */
-    }
-  }, []);
-
-  const insertBookingLink = useCallback((slug: string, title: string) => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    composeEditorRef.current?.insertLink(`${origin}/book/${slug}`, title || "Book a time");
-    setBookingMenuOpen(false);
-  }, []);
-
-  const handleSaveComposeTemplate = async () => {
-    const name = saveTemplateName.trim();
-    if (!name || !composeAccountEmail || saveTemplateSaving) return;
-    setSaveTemplateSaving(true);
-    setComposeError("");
-    try {
-      const response = await fetch("/api/gmail/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountEmail: composeAccountEmail,
-          name,
-          subject: composeSubject.trim() || "",
-          bodyHtml: composeBodyHtml,
-          bodyText: composeBody,
-        }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Failed to save template.");
-      setSaveTemplateModalOpen(false);
-      setSaveTemplateName("");
-      const listRes = await fetch(
-        `/api/gmail/templates?accountEmail=${encodeURIComponent(composeAccountEmail)}`
-      );
-      const listPayload = await listRes.json().catch(() => ({}));
-      setComposeTemplates(Array.isArray(listPayload?.templates) ? listPayload.templates : []);
-    } catch (error) {
-      setComposeError(error instanceof Error ? error.message : "Failed to save template.");
-    } finally {
-      setSaveTemplateSaving(false);
-    }
-  };
-
-  const applyComposeTemplate = (templateId: string) => {
-    const template = composeTemplates.find((entry) => entry.id === templateId);
-    if (!template) return;
-    if (template.subject) setComposeSubject(template.subject);
-    if (template.bodyHtml && template.bodyHtml.trim()) {
-      setComposeBodyHtml(template.bodyHtml);
-      setComposeBody(template.bodyText || "");
-    } else if (template.bodyText && template.bodyText.trim()) {
-      const raw = template.bodyText;
-      setComposeBody(raw);
-      const esc = (value: string) =>
-        value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      setComposeBodyHtml(`<p>${esc(raw).replace(/\n/g, "<br />")}</p>`);
-    }
-    setComposeMoreOpen(false);
-  };
-
-  // Append a chosen signature to the end of the current body (unlike templates, which replace it).
-  const applyComposeSignature = (signatureId: string) => {
-    const sig = composeSignatures.find((s) => s.id === signatureId);
-    if (!sig) return;
-    const escSig = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const sigHtml =
-      sig.signatureHtml && sig.signatureHtml.trim()
-        ? sig.signatureHtml
-        : `<p>${escSig(sig.signatureText || "").replace(/\n/g, "<br />")}</p>`;
-    setComposeBodyHtml((prev) => `${prev || ""}<p><br /></p>${sigHtml}`);
-    setComposeBody((prev) => `${(prev || "").replace(/\s+$/, "")}\n\n${sig.signatureText || ""}`.trim());
-    setComposeMoreOpen(false);
-  };
-
-  const handlePrintCompose = () => {
-    const html =
-      composeBodyHtml.trim() ||
-      `<p>${composeBody
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\n/g, "<br />")}</p>`;
-    printComposeContent(composeSubject || "(No Subject)", html);
-  };
 
   const messagesCountLabel = `${filteredMessages.length} Emails`;
   const activeModuleLabel = activeLabelId
     ? activeLabelName
     : MODULES.find((item) => item.key === activeModule)?.label || "Mailbox";
   const pageLabel = hasNextPage ? `Page ${currentPage}` : `Page ${currentPage} / ${currentPage}`;
-  const composeFromOptions = Array.from(
-    new Set([
-      ...(selectedAccounts.length > 0 ? selectedAccounts : connectedAccounts.map((entry) => entry.email)),
-      ...providerAccounts.map((entry) => entry.accountEmail),
-    ])
-  );
 
   const moduleCount = (moduleKey: ModuleKey) => {
     if (moduleKey === "drafts") {
@@ -4448,7 +2475,7 @@ ${sourceText}`;
                   <button
                     type="button"
                     onClick={() => {
-                      void openNewCompose();
+                      void compose.openNewCompose();
                     }}
                     className="compose-cta mb-4 inline-flex w-full items-center justify-center gap-2 rounded-md px-2 py-3 text-sm font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 md:px-3.5"
                   >
@@ -4690,7 +2717,7 @@ ${sourceText}`;
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
                     </div>
-                  ) : activeModule === "cryptography" ? (
+                  ) : activeModule === "cartography" ? (
                     <div className="h-full overflow-y-auto">
                       <CartographyView />
                     </div>
@@ -5034,383 +3061,7 @@ ${sourceText}`;
                         ) : null}
 
                         {activeModule === "contacts" ? (
-                          <div className="h-full flex flex-col">
-                            <input
-                              ref={importInputRef}
-                              type="file"
-                              accept=".csv,text/csv"
-                              onChange={handleImportCsv}
-                              className="hidden"
-                            />
-                            <div className="px-4 py-3 border-b border-white/30 overflow-visible relative z-20">
-                              <div className="mx-auto inline-flex items-center justify-center gap-2 whitespace-nowrap min-w-max">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAddContactForm(emptyAddContactForm);
-                                    setAddContactFirstNameTouched(false);
-                                    setAddContactError("");
-                                    setIsAddContactModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center gap-2 rounded-lg bg-[#701CC0] text-white px-3 py-2 text-xs font-medium hover:bg-[#5f17a5]"
-                                >
-                                  <FiPlus className="w-3.5 h-3.5" />
-                                  Add Contact
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => importInputRef.current?.click()}
-                                  className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB]"
-                                  title="Import CSV"
-                                  aria-label="Import CSV"
-                                >
-                                  <FiUpload className="w-3.5 h-3.5" />
-                                  Import CSV
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={exportContactsCsv}
-                                  className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB]"
-                                  title="Export As CSV"
-                                  aria-label="Export As CSV"
-                                >
-                                  <FiDownload className="w-3.5 h-3.5" />
-                                  Export As CSV
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={syncFromGmailContacts}
-                                  className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB]"
-                                >
-                                  <FaGoogle className="w-3.5 h-3.5 text-[#EA4335]" />
-                                  Sync Gmail
-                                </button>
-                                <div className="rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 w-80 shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                                  <FiSearch className="w-4 h-4 text-[#6B7280]" />
-                                  <input
-                                    value={contactSearch}
-                                    onChange={(e) => setContactSearch(e.target.value)}
-                                    placeholder="Search Contacts"
-                                    className="w-full text-sm bg-transparent outline-none"
-                                  />
-                                  {contactSearch.trim() ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setContactSearch("")}
-                                      className="inline-flex items-center justify-center rounded p-0.5 text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6]"
-                                      aria-label="Clear Contact Search"
-                                      title="Clear Contact Search"
-                                    >
-                                      <FiX className="w-3.5 h-3.5" />
-                                    </button>
-                                  ) : null}
-                                </div>
-                                <div className="relative" ref={contactFilterMenuRef}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setContactFilterOpen((prev) => !prev)}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm text-[#374151] shadow-sm transition-colors duration-200 hover:border-[#701CC0] hover:bg-gray-50"
-                                  >
-                                    <FiFilter className="h-4 w-4" />
-                                    <span className="text-sm font-medium">Filter</span>
-                                    <svg
-                                      className={`h-4 w-4 transition-transform duration-200 ${contactFilterOpen ? "rotate-180" : ""}`}
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                      aria-hidden
-                                    >
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                  </button>
-                                  {contactFilterOpen ? (
-                                    <div className="absolute right-0 z-[160] mt-2 w-72 rounded-xl border border-[#E5E7EB] bg-white py-4 shadow-xl">
-                                      <div className="px-5">
-                                        <h3 className="mb-4 text-sm font-semibold text-[#1E1B2E]">{"Sort & Filter"}</h3>
-
-                                        <div className="mb-5">
-                                          <label className="mb-2 block text-xs font-medium text-[#6B7280]">Tag</label>
-                                          <div className="relative">
-                                            <select
-                                              value={contactTagFilter}
-                                              onChange={(e) => {
-                                                setContactTagFilter(e.target.value);
-                                              }}
-                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                                            >
-                                              <option value="">All tags</option>
-                                              {contactsTags.map((tag) => (
-                                                <option key={tag.id} value={tag.id}>
-                                                  {tag.name}
-                                                </option>
-                                              ))}
-                                            </select>
-                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                                              <svg className="h-4 w-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                              </svg>
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="mb-5">
-                                          <label className="mb-2 block text-xs font-medium text-[#6B7280]">Source</label>
-                                          <div className="relative">
-                                            <select
-                                              value={contactSourceFilter}
-                                              onChange={(e) => {
-                                                setContactSourceFilter((e.target.value || "") as "" | "MANUAL" | "GMAIL" | "CSV");
-                                              }}
-                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                                            >
-                                              <option value="">All sources</option>
-                                              <option value="MANUAL">Manual</option>
-                                              <option value="GMAIL">Gmail</option>
-                                              <option value="CSV">CSV</option>
-                                            </select>
-                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                                              <svg className="h-4 w-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                              </svg>
-                                            </div>
-                                          </div>
-                                        </div>
-
-                                        <div className="border-t border-[#E5E7EB] pt-3">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setContactTagFilter("");
-                                              setContactSourceFilter("");
-                                              setContactFilterOpen(false);
-                                            }}
-                                            className="w-full rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-[#6B7280] transition-colors duration-200 hover:bg-gray-100 hover:text-[#374151]"
-                                          >
-                                            Clear All Filters
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex-1 overflow-auto p-2">
-                              {contactsError ? (
-                                <div className={`m-3 ${ALERT.error}`}>{contactsError}</div>
-                              ) : null}
-                              {contactsLoading ? (
-                                <MailboxLoader label="Loading Contacts..." />
-                              ) : contacts.length === 0 ? (
-                                <div className="h-full min-h-[320px] flex items-center justify-center px-6">
-                                  <div className="text-center rounded-2xl border border-[#E7E9F2] bg-white/50 backdrop-blur-md px-8 py-10">
-                                    <FiUsers className="w-8 h-8 mx-auto text-[#701CC0] animate-pulse" />
-                                    <p className="mt-3 text-sm font-semibold text-[#2A2D3B]">No Contacts Found</p>
-                                    <p className="text-xs text-[#7C829A] mt-1">Add a contact, import CSV, or sync from Gmail to get started.</p>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-3">
-                                  {selectedContactIds.length > 0 ? (
-                                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#E8DDFB] bg-[#F8F3FF] px-4 py-2.5">
-                                      <span className="text-xs font-medium text-[#4B2E83]">
-                                        {selectedContactIds.length} selected
-                                      </span>
-                                      {bulkContactActionError ? (
-                                        <span className="text-xs text-red-600">{bulkContactActionError}</span>
-                                      ) : null}
-                                      <div className="ml-auto flex items-center gap-2">
-                                        <div className="relative">
-                                          <select
-                                            value=""
-                                            disabled={bulkContactActionLoading}
-                                            onChange={(e) => bulkAddTagToSelected(e.target.value)}
-                                            className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs text-[#374151] disabled:opacity-50"
-                                            aria-label="Add tag to selected contacts"
-                                          >
-                                            <option value="">Add tag to selected…</option>
-                                            {contactsTags.map((tag) => (
-                                              <option key={tag.id} value={tag.id}>
-                                                {tag.name}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                        <button
-                                          type="button"
-                                          disabled={bulkContactActionLoading}
-                                          onClick={() => setConfirmBulkDeleteContacts(true)}
-                                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                                        >
-                                          <FiTrash2 className="w-3.5 h-3.5" />
-                                          Delete selected
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setSelectedContactIds([])}
-                                          className="text-xs text-[#6B7280] hover:text-[#374151]"
-                                        >
-                                          Clear
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                  <div className="rounded-xl border border-[#E8EBF4] bg-white overflow-hidden">
-                                    <table className="min-w-full text-sm">
-                                      <thead className="sticky top-0 bg-[#F9FAFD] z-10">
-                                        <tr className="border-b border-[#E8EBF4] text-left text-xs text-[#6B7280] uppercase tracking-wide">
-                                          <th className="w-10 px-4 py-3">
-                                            <input
-                                              type="checkbox"
-                                              aria-label="Select all contacts on this page"
-                                              checked={contacts.length > 0 && contacts.every((c) => selectedContactIds.includes(c.id))}
-                                              onChange={toggleAllContactsSelected}
-                                            />
-                                          </th>
-                                          <th className="px-4 py-3 font-medium">Name</th>
-                                          {contacts.some((c) => c.company) ? <th className="px-4 py-3 font-medium">Client</th> : null}
-                                          <th className="px-4 py-3 font-medium">Email</th>
-                                          {contactsVisibility.showPhone ? <th className="px-4 py-3 font-medium">Phone</th> : null}
-                                          {contactsVisibility.showBusiness ? <th className="px-4 py-3 font-medium">Business</th> : null}
-                                          {contactsVisibility.showWebsite ? <th className="px-4 py-3 font-medium">Website</th> : null}
-                                          <th className="px-4 py-3 font-medium">Address</th>
-                                          <th className="px-4 py-3 font-medium">Tags</th>
-                                          <th className="px-4 py-3 font-medium text-right">Manage</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="bg-white divide-y divide-[#EEF1F7]">
-                                        {contacts.map((contact) => {
-                                          const existingTagIds = new Set(contact.tags.map((tag) => tag.id));
-                                          const availableTags = contactsTags.filter((tag) => !existingTagIds.has(tag.id));
-                                          const displayName =
-                                            `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || "(No Name)";
-                                          return (
-                                            <tr key={contact.id} className="hover:bg-[#F8F3FF] transition-colors">
-                                              <td className="px-4 py-3">
-                                                <input
-                                                  type="checkbox"
-                                                  aria-label={`Select ${displayName}`}
-                                                  checked={selectedContactIds.includes(contact.id)}
-                                                  onChange={() => toggleContactSelected(contact.id)}
-                                                />
-                                              </td>
-                                              <td className="px-4 py-3">
-                                                <div className="font-medium text-[#1E1B2E]">{displayName}</div>
-                                                <div className="mt-0.5 text-[11px] text-[#8A90A6] uppercase tracking-wide">{contact.source}</div>
-                                              </td>
-                                              {contacts.some((c) => c.company) ? (
-                                                <td className="px-4 py-3 text-[#374151]">{contact.company?.name || "-"}</td>
-                                              ) : null}
-                                              <td className="px-4 py-3 text-[#374151]">{contact.email}</td>
-                                              {contactsVisibility.showPhone ? <td className="px-4 py-3 text-[#374151]">{contact.phone || "-"}</td> : null}
-                                              {contactsVisibility.showBusiness ? <td className="px-4 py-3 text-[#374151]">{contact.business || "-"}</td> : null}
-                                              {contactsVisibility.showWebsite ? (
-                                                <td className="px-4 py-3 text-[#374151]">
-                                                  {contact.website ? (
-                                                    <a
-                                                      href={/^https?:\/\//i.test(contact.website) ? contact.website : `https://${contact.website}`}
-                                                      target="_blank"
-                                                      rel="noopener noreferrer"
-                                                      className="text-[#701CC0] hover:underline"
-                                                    >
-                                                      Click
-                                                    </a>
-                                                  ) : (
-                                                    "-"
-                                                  )}
-                                                </td>
-                                              ) : null}
-                                              <td className="px-4 py-3 text-[#374151] max-w-[220px] truncate">{contact.address || "-"}</td>
-                                              <td className="px-4 py-3">
-                                                <div className="flex flex-wrap items-center gap-1.5">
-                                                  {contact.tags.map((tag) => (
-                                                    <span
-                                                      key={tag.id}
-                                                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] text-white"
-                                                      style={{ backgroundColor: tag.color || "#701CC0" }}
-                                                    >
-                                                      {tag.name}
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => removeTagFromContact(contact.id, tag.id)}
-                                                        className="text-white/90 hover:text-white"
-                                                      >
-                                                        <FiX className="w-3 h-3" />
-                                                      </button>
-                                                    </span>
-                                                  ))}
-                                                  <div className="relative">
-                                                    <button
-                                                      type="button"
-                                                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
-                                                      aria-label="Add Tag"
-                                                      title="Add Tag"
-                                                    >
-                                                      <FiPlus className="w-3 h-3" />
-                                                    </button>
-                                                    <select
-                                                      value=""
-                                                      onChange={(e) => addTagToContact(contact.id, e.target.value)}
-                                                      className="absolute inset-0 h-5 w-5 cursor-pointer opacity-0"
-                                                      aria-label="Select tag to add"
-                                                    >
-                                                      <option value="">Select tag</option>
-                                                      {availableTags.map((tag) => (
-                                                        <option key={tag.id} value={tag.id}>
-                                                          {tag.name}
-                                                        </option>
-                                                      ))}
-                                                    </select>
-                                                  </div>
-                                                </div>
-                                              </td>
-                                              <td className="px-4 py-3 text-right">
-                                                <div className="inline-flex justify-end">
-                                                  <RowActionMenu label={`Manage ${displayName}`} menuWidthClassName="w-44">
-                                                    <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />}>
-                                                      Edit Contact
-                                                    </RowActionMenuItem>
-                                                    <RowActionMenuItem onClick={() => deleteContact(contact)} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-                                                      Delete Contact
-                                                    </RowActionMenuItem>
-                                                  </RowActionMenu>
-                                                </div>
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                  {contactsTotalCount > CONTACTS_PAGE_SIZE ? (
-                                    <div className="px-1 pb-1 flex items-center justify-between text-xs text-[#6B7280]">
-                                      <span>
-                                        Showing page {contactCurrentPage} of {contactsTotalPages} ({contactsTotalCount} contacts)
-                                      </span>
-                                      <div className="inline-flex items-center gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => setContactCurrentPage((prev) => Math.max(1, prev - 1))}
-                                          disabled={contactsLoading || contactCurrentPage <= 1}
-                                          className="px-2 py-1 rounded border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                          Previous
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setContactCurrentPage((prev) => Math.min(contactsTotalPages, prev + 1))}
-                                          disabled={contactsLoading || contactCurrentPage >= contactsTotalPages}
-                                          className="px-2 py-1 rounded border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                          Next
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          <ContactsPanel contacts={contacts} />
                         ) : !canLoadMessages ? (
                           <div className="h-full min-h-[320px] flex items-center justify-center text-sm text-[#7C829A]">
                             {activeModule} section placeholder.
@@ -5464,7 +3115,7 @@ ${sourceText}`;
                                   }}
                                   onClick={() => {
                                     if (message.isComposeDraft) {
-                                      openComposeDraftFromRow(message);
+                                      compose.openComposeDraftFromRow(message);
                                       return;
                                     }
                                     setSelectedMessageId(message.id);
@@ -5615,7 +3266,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => {
-                              void openReplyCompose();
+                              void compose.openReplyCompose();
                             }}
                             className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply"
@@ -5626,7 +3277,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => {
-                              void openReplyAllCompose();
+                              void compose.openReplyAllCompose();
                             }}
                             className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply All"
@@ -5637,7 +3288,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => {
-                              void openForwardCompose();
+                              void compose.openForwardCompose();
                             }}
                             className={`${ICON_BUTTON} email-tip`}
                             aria-label="Forward"
@@ -5911,381 +3562,7 @@ ${sourceText}`;
                                     window chrome — the reply you are about to write belongs to this
                                     message, so the control for it belongs next to it. Hidden while a
                                     composer is open, since the composer already is that action. */}
-                                {!inlineComposeMode ? (
-                                  <div className="flex flex-wrap items-center gap-2 pt-3">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        void openReplyCompose();
-                                      }}
-                                      className={REPLY_ACTION_BUTTON}
-                                    >
-                                      <FiCornerUpLeft className="h-4 w-4" aria-hidden />
-                                      Reply
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        void openReplyAllCompose();
-                                      }}
-                                      className={REPLY_ACTION_BUTTON}
-                                    >
-                                      <MdReplyAll className="h-[18px] w-[18px]" aria-hidden />
-                                      Reply all
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        void openForwardCompose();
-                                      }}
-                                      className={REPLY_ACTION_BUTTON}
-                                    >
-                                      <FiSend className="h-4 w-4" aria-hidden />
-                                      Forward
-                                    </button>
-                                  </div>
-                                ) : null}
-
-                                {inlineComposeMode ? (
-                                  /* Inline reply, shaped the way Gmail's is: one recipient line, the
-                                     message, then Send. No uppercase field labels and no stacked
-                                     boxes — a reply already has its recipient and its subject, so
-                                     presenting them as a form to fill in is noise.
-
-                                     Authored light-first (bg-white, text-[#1E1B2E]) like the rest of
-                                     the panel, because the dark theme remaps those classes. The
-                                     previous version set its background with a gradient utility,
-                                     which the dark layer does not remap — so the card stayed white
-                                     while its text was remapped to near-white and became illegible. */
-                                  <div ref={inlineComposeRef} className="pt-3">
-                                    <div className="inline-reply-card rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
-                                      {/* Recipient line. Gmail shows the address as plain text with
-                                          Cc/Bcc one click away, rather than a labelled form row and a
-                                          mode caption repeating what the button you just pressed said. */}
-                                      <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
-                                        <span className="shrink-0 text-[13px] text-[#6B7280]">To</span>
-                                        {inlineToEditing ? (
-                                          <input
-                                            value={inlineComposeTo}
-                                            onChange={(event) => setInlineComposeTo(event.target.value)}
-                                            onBlur={() => setInlineToEditing(false)}
-                                            autoFocus
-                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
-                                            placeholder="name@email.com, second@email.com"
-                                            aria-label="To (comma separated)"
-                                          />
-                                        ) : (
-                                          /* Each address is its own chip so several are countable at
-                                             a glance; the whole row is still one comma-separated
-                                             value, so clicking it edits the list as text. */
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineToEditing(true)}
-                                            className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-left"
-                                            title="Click to edit recipients (comma separated)"
-                                          >
-                                            {inlineComposeTo
-                                              .split(",")
-                                              .map((entry) => entry.trim())
-                                              .filter(Boolean).length === 0 ? (
-                                              <span className="text-[13px] text-[#9CA3AF]">Add recipients</span>
-                                            ) : (
-                                              inlineComposeTo
-                                                .split(",")
-                                                .map((entry) => entry.trim())
-                                                .filter(Boolean)
-                                                .map((addr, index, all) => {
-                                                  const bare = addr.includes("<")
-                                                    ? (addr.match(/<([^>]+)>/)?.[1] || addr).trim()
-                                                    : addr;
-                                                  const valid = EMAIL_REGEX.test(bare);
-                                                  return (
-                                                    <span
-                                                      key={`${addr}-${index}`}
-                                                      className={`recipient-chip ${valid ? "" : "is-invalid"}`}
-                                                      title={valid ? addr : `${addr} — not a valid address`}
-                                                    >
-                                                      <span className="truncate">{addr}</span>
-                                                      <span
-                                                        role="button"
-                                                        tabIndex={0}
-                                                        aria-label={`Remove ${addr}`}
-                                                        className="recipient-chip-x"
-                                                        onClick={(event) => {
-                                                          event.stopPropagation();
-                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
-                                                        }}
-                                                        onKeyDown={(event) => {
-                                                          if (event.key !== "Enter" && event.key !== " ") return;
-                                                          event.stopPropagation();
-                                                          event.preventDefault();
-                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
-                                                        }}
-                                                      >
-                                                        <FiX className="h-3 w-3" aria-hidden />
-                                                      </span>
-                                                    </span>
-                                                  );
-                                                })
-                                            )}
-                                          </button>
-                                        )}
-                                        <div className="flex shrink-0 items-center gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineShowCc((open) => !open)}
-                                            aria-pressed={inlineShowCc}
-                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
-                                          >
-                                            Cc
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineShowBcc((open) => !open)}
-                                            aria-pressed={inlineShowBcc}
-                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
-                                          >
-                                            Bcc
-                                          </button>
-                                        </div>
-                                      </div>
-
-                                      {inlineShowCc ? (
-                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
-                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Cc</span>
-                                          <input
-                                            value={inlineComposeCc}
-                                            onChange={(event) => setInlineComposeCc(event.target.value)}
-                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
-                                            aria-label="Cc"
-                                          />
-                                        </div>
-                                      ) : null}
-                                      {inlineShowBcc ? (
-                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
-                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Bcc</span>
-                                          <input
-                                            value={inlineComposeBcc}
-                                            onChange={(event) => setInlineComposeBcc(event.target.value)}
-                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
-                                            aria-label="Bcc"
-                                          />
-                                        </div>
-                                      ) : null}
-
-                                      {/* Subject only when forwarding. A reply inherits the thread's
-                                          subject, as in Gmail; offering it as a field here invites
-                                          breaking the thread. */}
-                                      {inlineComposeMode === "forward" ? (
-                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
-                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Subject</span>
-                                          <input
-                                            value={inlineComposeSubject}
-                                            onChange={(event) => setInlineComposeSubject(event.target.value)}
-                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
-                                            aria-label="Subject"
-                                          />
-                                        </div>
-                                      ) : null}
-
-                                      {/* Same rich editor the main composer uses, with its formatting
-                                          toolbar pinned open — Gmail's reply always shows one, and a
-                                          plain textarea meant a reply could not carry bold, a list or
-                                          a link at all. */}
-                                      {/* The reply body. Removing the trimmed-content block took
-                                          this with it, leaving the composer with no input at all —
-                                          the recipient row and the send bar rendered, but there was
-                                          nowhere to type. */}
-                                      <div className="px-2 pb-1 pt-2">
-                                        <ComposeRichEditor
-                                          ref={inlineEditorRef}
-                                          valueHtml={inlineComposeIntroHtml}
-                                          onChange={({ html, text }) => {
-                                            setInlineComposeIntroHtml(html);
-                                            setInlineComposeIntroText(text);
-                                          }}
-                                          minHeightClass="min-h-[150px]"
-                                          showToolbar={inlineShowFormatting}
-                                        />
-                                      </div>
-
-                                      {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
-                                        <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
-                                          <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">
-                                            Forwarded message
-                                          </p>
-                                          <div
-                                            className="max-h-48 overflow-y-auto text-sm leading-6 text-[#374151]"
-                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
-                                          />
-                                        </div>
-                                      ) : null}
-
-                                      {inlineComposeError ? (
-                                        <p className="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-                                          {inlineComposeError}
-                                        </p>
-                                      ) : null}
-                                      {inlineComposeSuccess ? (
-                                        <p className="mx-4 mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                                          {inlineComposeSuccess}
-                                        </p>
-                                      ) : null}
-
-                                      {/* One control strip, per Gmail: a compact Send, then the insert/mode controls
-                                          as quiet icons, then discard at the far edge. The formatting
-                                          toolbar is rendered into this same row by the editor above
-                                          (toolbarSlot), so there is no second bar competing with it. */}
-                                      <div className="inline-reply-bar flex flex-wrap items-center gap-1 px-3 pb-2.5 pt-1.5">
-                                        <button
-                                          type="button"
-                                          onClick={sendInlineCompose}
-                                          disabled={
-                                            inlineComposeSending ||
-                                            !inlineComposeTo.trim() ||
-                                            !inlineComposeTo
-                                              .split(",")
-                                              .map((entry) => entry.trim())
-                                              .filter(Boolean)
-                                              .every((entry) =>
-                                                EMAIL_REGEX.test(entry.includes("<") ? (entry.match(/<([^>]+)>/)?.[1] || entry).trim() : entry)
-                                              ) ||
-                                            (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
-                                          }
-                                          className="compose-cta inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] disabled:pointer-events-none disabled:opacity-40"
-                                        >
-                                          <FiSend className="h-4 w-4 shrink-0" aria-hidden />
-                                          {inlineComposeSending ? "Sending…" : "Send"}
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => void handleArtemisDraft()}
-                                          disabled={artemisDrafting}
-                                          className="inline-reply-icon email-tip"
-                                          data-tip={artemisDrafting ? "Writing…" : "Help me write"}
-                                          aria-label="Help me write"
-                                        >
-                                          <BoltDraw className="h-4 w-4" drafting={artemisDrafting} />
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => setInlineShowFormatting((open) => !open)}
-                                          aria-pressed={inlineShowFormatting}
-                                          className={`inline-reply-icon email-tip ${inlineShowFormatting ? "is-on" : ""}`}
-                                          data-tip="Formatting options"
-                                          aria-label="Formatting options"
-                                        >
-                                          <FiType className="h-4 w-4" aria-hidden />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => composeAttachInputRef.current?.click()}
-                                          className="inline-reply-icon email-tip"
-                                          data-tip="Attach files"
-                                          aria-label="Attach files"
-                                        >
-                                          <FiPaperclip className="h-4 w-4" aria-hidden />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled
-                                          className="inline-reply-icon email-tip"
-                                          data-tip="Insert from Drive (coming soon)"
-                                          aria-label="Insert from Drive"
-                                        >
-                                          <DriveMark className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => inlineEditorRef.current?.promptInsertLink()}
-                                          className="inline-reply-icon email-tip"
-                                          data-tip="Insert link"
-                                          aria-label="Insert link"
-                                        >
-                                          <FiLink className="h-4 w-4" aria-hidden />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => inlineEditorRef.current?.promptInsertImage()}
-                                          className="inline-reply-icon email-tip"
-                                          data-tip="Insert image"
-                                          aria-label="Insert image"
-                                        >
-                                          <FiImage className="h-4 w-4" aria-hidden />
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setConfidentialOpen((open) => !open)}
-                                          aria-pressed={confidentialOn}
-                                          className={`inline-reply-icon email-tip ${confidentialOn ? "is-on" : ""}`}
-                                          data-tip="Confidential mode"
-                                          aria-label="Confidential mode"
-                                        >
-                                          <FiLock className="h-4 w-4" aria-hidden />
-                                        </button>
-                                        <div className="relative shrink-0">
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineMoreOpen((open) => !open)}
-                                            className="inline-reply-icon email-tip"
-                                            data-tip="Insert signature"
-                                            aria-label="Insert signature"
-                                            aria-expanded={inlineMoreOpen}
-                                          >
-                                            <FiEdit3 className="h-4 w-4" aria-hidden />
-                                          </button>
-                                          {inlineMoreOpen ? (
-                                            <div className="compose-menu absolute bottom-full left-0 z-[60] mb-2 w-52">
-                                              {composeSignatures.length === 0 ? (
-                                                <p className="px-3 py-2 text-xs text-[#8C86A6]">No signatures yet</p>
-                                              ) : (
-                                                composeSignatures.map((sig) => (
-                                                  <button
-                                                    key={sig.id}
-                                                    type="button"
-                                                    className={`${composeMenuItemClass} truncate`}
-                                                    onClick={() => {
-                                                      setInlineMoreOpen(false);
-                                                      applyComposeSignature(sig.id);
-                                                    }}
-                                                  >
-                                                    <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
-                                                    <span className="truncate">
-                                                      {sig.name}
-                                                      {sig.isDefault ? " (default)" : ""}
-                                                    </span>
-                                                  </button>
-                                                ))
-                                              )}
-                                            </div>
-                                          ) : null}
-                                        </div>
-
-                                        <span className="flex-1" aria-hidden />
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            // Discard means gone: drop the autosaved draft rather
-                                            // than flushing it, or every abandoned reply would
-                                            // accumulate in Drafts.
-                                            if (inlineDraftStorageKey) {
-                                              void clearLocalDraft(inlineDraftStorageKey).catch(() => null);
-                                            }
-                                            setInlineComposeMode(null);
-                                            void loadMailboxCounts();
-                                          }}
-                                          className="inline-reply-icon email-tip"
-                                          data-tip="Discard Reply"
-                                          aria-label="Discard Reply"
-                                        >
-                                          <FiTrash2 className="h-4 w-4" aria-hidden />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : null}
+                                <InlineReply compose={compose} />
                               </div>
                             )}
                           </div>
@@ -6302,999 +3579,10 @@ ${sourceText}`;
         </div>
       )}
 
-      {isAddContactModalOpen ? (
-        <div
-          className="fixed inset-0 z-[140] flex items-center justify-center bg-[#2E1050]/30 backdrop-blur-md p-4"
-          onClick={closeAddContactModal}
-        >
-          <div
-            className="w-full max-w-2xl rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] p-6"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
-                  <FiUserPlus className="w-5 h-5" />
-                </div>
-                <h3 className="text-xl font-semibold text-[#1E1B2E]">Add Contact</h3>
-              </div>
-              <button
-                type="button"
-                onClick={closeAddContactModal}
-                className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
-                aria-label="Close Add Contact Modal"
-              >
-                <FiX className="w-4 h-4" />
-              </button>
-            </div>
-            {addContactError ? (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{addContactError}</div>
-            ) : null}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className={FIELD_LABEL}>
-                  First Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  value={addContactForm.firstName}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                  onBlur={() => setAddContactFirstNameTouched(true)}
-                  placeholder="Enter First Name"
-                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                    addContactFirstNameTouched && !addContactForm.firstName.trim()
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#E5E7EB]"
-                  }`}
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>Last Name</label>
-                <input
-                  value={addContactForm.lastName}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                  placeholder="Enter Last Name"
-                  className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className={FIELD_LABEL}>
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  value={addContactForm.email}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, email: event.target.value }))}
-                  placeholder="Enter Email"
-                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                    addContactForm.email.trim() && !EMAIL_REGEX.test(addContactForm.email.trim())
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#E5E7EB]"
-                  }`}
-                />
-              </div>
-              {addContactForm.email.trim() && !EMAIL_REGEX.test(addContactForm.email.trim()) ? (
-                <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid email address.</p>
-              ) : null}
-              <div>
-                <label className={FIELD_LABEL}>Phone</label>
-                <input
-                  value={addContactForm.phone}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, phone: formatPhoneInput(event.target.value) }))}
-                  placeholder="(123)-456-7890"
-                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                    addContactForm.phone.trim() && !isPhoneValid(addContactForm.phone)
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#E5E7EB]"
-                  }`}
-                />
-              </div>
-              {addContactForm.phone.trim() && !isPhoneValid(addContactForm.phone) ? (
-                <p className="md:col-span-2 -mt-1 text-xs text-red-600">Phone format: (123)-456-7890</p>
-              ) : null}
-              <div>
-                <label className={FIELD_LABEL}>Business</label>
-                <input
-                  value={addContactForm.business}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, business: event.target.value }))}
-                  placeholder="Enter Business"
-                  className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>Website</label>
-                <input
-                  value={addContactForm.website}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, website: event.target.value }))}
-                  placeholder="Enter Website"
-                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                    addContactForm.website.trim() && !isWebsiteValid(addContactForm.website)
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#E5E7EB]"
-                  }`}
-                />
-              </div>
-              {addContactForm.website.trim() && !isWebsiteValid(addContactForm.website) ? (
-                <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid website URL.</p>
-              ) : null}
-              <div className="md:col-span-2">
-                <label className={FIELD_LABEL}>Address</label>
-                <input
-                  value={addContactForm.address}
-                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, address: event.target.value }))}
-                  placeholder="Enter Address"
-                  className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between mt-5">
-              <button
-                type="button"
-                onClick={closeAddContactModal}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={createContact}
-                disabled={
-                  addingContact ||
-                  !addContactForm.firstName.trim() ||
-                  !addContactForm.email.trim() ||
-                  !EMAIL_REGEX.test(addContactForm.email.trim()) ||
-                  !isPhoneValid(addContactForm.phone) ||
-                  !isWebsiteValid(addContactForm.website)
-                }
-                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {addingContact ? "Adding..." : "Add Contact"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
-      {isEditContactModalOpen ? (
-        <div className="fixed inset-0 bg-[#2E1050]/30 backdrop-blur-md flex items-center justify-center z-[150] p-4">
-          <div
-            className="bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] rounded-2xl p-6 w-full max-w-2xl mx-4"
-            ref={editContactModalRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Edit Contact"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-                <FiEdit3 className="w-6 h-6 text-[#701CC0]" />
-              </div>
-              <h3 className="text-xl font-semibold text-[#1E1B2E]">Edit Contact</h3>
-            </div>
-
-            {editContactError ? (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{editContactError}</div>
-            ) : null}
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <label className={FIELD_LABEL}>
-                  First Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editContactForm.firstName}
-                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, firstName: true }))}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                    editContactTouched.firstName && !editContactForm.firstName.trim()
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#D1D5DB]"
-                  }`}
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>Last Name</label>
-                <input
-                  type="text"
-                  value={editContactForm.lastName}
-                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                  className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={editContactForm.email}
-                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, email: event.target.value }))}
-                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, email: true }))}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                    editContactTouched.email &&
-                    editContactForm.email.trim() &&
-                    !EMAIL_REGEX.test(editContactForm.email.trim())
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#D1D5DB]"
-                  }`}
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>Phone</label>
-                <input
-                  type="text"
-                  value={editContactForm.phone}
-                  onChange={(event) =>
-                    setEditContactForm((prev) => ({ ...prev, phone: formatPhoneInput(event.target.value) }))
-                  }
-                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, phone: true }))}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                    editContactTouched.phone && editContactForm.phone.trim() && !isPhoneValid(editContactForm.phone)
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#D1D5DB]"
-                  }`}
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>Business</label>
-                <input
-                  type="text"
-                  value={editContactForm.business}
-                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, business: event.target.value }))}
-                  className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                />
-              </div>
-              <div>
-                <label className={FIELD_LABEL}>Website</label>
-                <input
-                  type="text"
-                  value={editContactForm.website}
-                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, website: event.target.value }))}
-                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, website: true }))}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                    editContactTouched.website && editContactForm.website.trim() && !isWebsiteValid(editContactForm.website)
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#D1D5DB]"
-                  }`}
-                />
-              </div>
-              <div className="col-span-2">
-                <label className={FIELD_LABEL}>Address</label>
-                <input
-                  type="text"
-                  value={editContactForm.address}
-                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, address: event.target.value }))}
-                  className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={closeEditContactModal}
-                className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveEditedContact}
-                disabled={
-                  editingContact ||
-                  !editContactForm.firstName.trim() ||
-                  !editContactForm.email.trim() ||
-                  !EMAIL_REGEX.test(editContactForm.email.trim()) ||
-                  !isPhoneValid(editContactForm.phone) ||
-                  !isWebsiteValid(editContactForm.website)
-                }
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  editingContact ||
-                  !editContactForm.firstName.trim() ||
-                  !editContactForm.email.trim() ||
-                  !EMAIL_REGEX.test(editContactForm.email.trim()) ||
-                  !isPhoneValid(editContactForm.phone) ||
-                  !isWebsiteValid(editContactForm.website)
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-[#701CC0] text-white hover:bg-[#5f17a5]"
-                }`}
-              >
-                {editingContact ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isComposeOpen ? (
-        <div
-          className={
-            composeExpanded
-              ? "fixed inset-0 z-[120] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4"
-              : "contents"
-          }
-          onClick={composeExpanded ? () => setComposeExpanded(false) : undefined}
-          role="presentation"
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            className={`compose-hud flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] ${
-              composeExpanded
-                ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-2xl"
-                : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-2xl"
-            }`}
-            role="dialog"
-            aria-label={composeThreadId ? "Reply composer" : "New message composer"}
-          >
-            <div className="compose-hud-header flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-2.5">
-              <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
-                {composeThreadId ? "Reply" : "New Message"}
-              </p>
-              <div className="flex shrink-0 items-center">
-                <button
-                  type="button"
-                  onClick={() => setComposeExpanded((prev) => !prev)}
-                  className="rounded-full p-2 text-white/90 hover:bg-white/15"
-                  title={composeExpanded ? "Resize" : "Expand"}
-                  aria-label={composeExpanded ? "Shrink composer" : "Expand composer"}
-                >
-                  {composeExpanded ? <FiMinimize2 className="h-5 w-5" /> : <FiMaximize2 className="h-5 w-5" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeCompose}
-                  className="rounded-full p-2 text-white/90 hover:bg-white/15"
-                  title="Close"
-                  disabled={sendingCompose}
-                  aria-label="Close compose"
-                >
-                  <FiX className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className={`flex min-h-0 flex-1 flex-col bg-white ${composeExpanded ? "overflow-hidden" : ""}`}>
-              <div
-                className={`flex min-h-0 flex-1 flex-col px-0 ${
-                  composeExpanded
-                    ? "overflow-hidden"
-                    : `max-h-[min(66vh,580px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
-                }`}
-              >
-                <div className="shrink-0 px-3">
-                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
-                    <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
-                    <div className="relative min-w-0">
-                      <select
-                        value={composeFrom || composeAccountEmail}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setComposeFrom(value);
-                          if (composeFromOptions.includes(value)) {
-                            setComposeAccountEmail(value);
-                            return;
-                          }
-                          // An alias only sends through the mailbox that owns it — picking one
-                          // has to move the sending account too, or Gmail rejects the send.
-                          const owner = composeAliases.find((alias) => alias.email === value)?.accountEmail;
-                          if (owner) setComposeAccountEmail(owner);
-                        }}
-                        className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#1E1B2E] outline-none focus:ring-0"
-                      >
-                        {composeFromOptions.map((email) => (
-                          <option key={email} value={email}>
-                            {email}
-                          </option>
-                        ))}
-                        {composeAliases
-                          // Drop the primaries — they're already listed above as accounts.
-                          .filter((alias) => !composeFromOptions.includes(alias.email))
-                          .map((alias) => (
-                            <option key={`${alias.accountEmail}::${alias.email}`} value={alias.email}>
-                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email}
-                            </option>
-                          ))}
-                      </select>
-                      <FiChevronDown
-                        className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6368]"
-                        aria-hidden
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
-                    <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">To</span>
-                    <div className="flex min-w-0 items-center gap-2">
-                      <input
-                        value={composeTo}
-                        onChange={(event) => setComposeTo(event.target.value)}
-                        placeholder=""
-                        className="min-w-0 flex-1 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none placeholder:text-[#70757a]"
-                      />
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowCc((prev) => !prev)}
-                          className={`whitespace-nowrap text-sm font-medium hover:underline ${
-                            showCc ? "text-[#701CC0]" : "text-[#701CC0]"
-                          }`}
-                          aria-pressed={showCc}
-                          title={showCc ? "Hide Cc field" : "Show Cc field"}
-                        >
-                          Cc
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowBcc((prev) => !prev)}
-                          className={`whitespace-nowrap text-sm font-medium hover:underline ${
-                            showBcc ? "text-[#701CC0]" : "text-[#701CC0]"
-                          }`}
-                          aria-pressed={showBcc}
-                          title={showBcc ? "Hide Bcc field" : "Show Bcc field"}
-                        >
-                          Bcc
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {showCc ? (
-                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
-                      <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Cc</span>
-                      <input
-                        value={composeCc}
-                        onChange={(event) => setComposeCc(event.target.value)}
-                        placeholder=""
-                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none"
-                      />
-                    </div>
-                  ) : null}
-
-                  {showBcc ? (
-                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
-                      <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Bcc</span>
-                      <input
-                        value={composeBcc}
-                        onChange={(event) => setComposeBcc(event.target.value)}
-                        placeholder=""
-                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none"
-                      />
-                    </div>
-                  ) : null}
-
-                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
-                    <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Subject</span>
-                    <input
-                      value={composeSubject}
-                      onChange={(event) => setComposeSubject(event.target.value)}
-                      placeholder=""
-                      className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div
-                  className={
-                    composeExpanded
-                      ? "flex min-h-0 flex-1 flex-col px-3 pb-1 pt-3"
-                      : "px-3 pt-3"
-                  }
-                >
-                  <ComposeRichEditor
-                    ref={composeEditorRef}
-                    valueHtml={composeBodyHtml}
-                    onChange={({ html, text }) => {
-                      setComposeBodyHtml(html);
-                      setComposeBody(text);
-                    }}
-                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[280px]"}
-                    className={composeExpanded ? "min-h-0 flex-1 flex flex-col overflow-hidden" : ""}
-                    showToolbar={composeFormattingToolbarOpen}
-                  />
-                  {composeAttachments.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {composeAttachments.map((attachment) => (
-                        <span
-                          key={attachment.id}
-                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#EAE5F4] bg-[#f8f9fa] px-2 py-0.5 text-xs text-[#1E1B2E]"
-                        >
-                          <span className="min-w-0 truncate">{attachment.filename}</span>
-                          <button
-                            type="button"
-                            className="shrink-0 rounded-full p-0.5 text-[#5f6368] hover:bg-[#e8eaed]"
-                            onClick={() =>
-                              setComposeAttachments((prev) => prev.filter((a) => a.id !== attachment.id))
-                            }
-                            aria-label={`Remove ${attachment.filename}`}
-                          >
-                            <FiX className="h-3.5 w-3.5" aria-hidden />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <input
-                    ref={composeAttachInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={async (event) => {
-                      await addComposeAttachmentsFromFiles(event.target.files);
-                      event.target.value = "";
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="shrink-0 border-t border-[#EAE5F4] bg-white px-3 py-2">
-                {draftSaveState && <p role="status" className="text-sm">{draftSaveState}</p>}
-                {composeError ? (
-                  <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">{composeError}</div>
-                ) : null}
-                {undoCountdown !== null ? (
-                  <div className="mb-2 flex items-center justify-between rounded-lg bg-[#1E1B2E] px-3 py-2 text-xs font-medium text-white">
-                    <span>Sending in {undoCountdown}s…</span>
-                    <button type="button" onClick={cancelUndoSend} className="font-semibold underline underline-offset-2">
-                      Undo
-                    </button>
-                  </div>
-                ) : null}
-                {composeLintWarnings.length > 0 ? (
-                  <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
-                    <FiAlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                    <div>
-                      <span className="font-semibold">Deliverability check:</span>
-                      <ul className="mt-0.5 list-disc pl-4">
-                        {composeLintWarnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                ) : null}
-                {composeSuccess ? (
-                  <div className="mb-2 rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs text-green-800">
-                    {composeSuccess}
-                  </div>
-                ) : null}
-                <div className="compose-actions flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={handleSendCompose}
-                      aria-label={`Send from ${composeFrom || composeAccountEmail}`}
-                      disabled={
-                        sendingCompose ||
-                        undoCountdown !== null ||
-                        !composeTo.trim() ||
-                        !composeHasMeaningfulBody ||
-                        !composeAccountEmail
-                      }
-                      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
-                    >
-                      {sendingCompose ? "Sending…" : scheduleAt ? "Schedule send" : "Send"}
-                    </button>
-                    <div className="relative shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setScheduleOpen((open) => !open)}
-                        title="Schedule send"
-                        aria-label="Schedule send"
-                        aria-pressed={scheduleOpen || Boolean(scheduleAt)}
-                        className={composeIconClass(Boolean(scheduleAt) || scheduleOpen)}
-                      >
-                        <FiClock className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      {scheduleOpen ? (
-                        <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
-                          <label htmlFor="compose-schedule-at" className="mb-1.5 block text-xs font-semibold text-[#1E1B2E]">
-                            Send at
-                          </label>
-                          <input
-                            id="compose-schedule-at"
-                            type="datetime-local"
-                            value={scheduleAt}
-                            min={toDatetimeLocalValue(new Date(Date.now() + 60_000))}
-                            onChange={(event) => setScheduleAt(event.target.value)}
-                            className="w-full rounded border border-[#E5E7EB] px-2.5 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
-                          />
-                          <div className="mt-2 flex items-center justify-between gap-2">
-                            {scheduleAt ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setScheduleAt("");
-                                  setScheduleOpen(false);
-                                }}
-                                className="text-xs font-medium text-[#6B7280] hover:text-[#1E1B2E]"
-                              >
-                                Clear
-                              </button>
-                            ) : (
-                              <span />
-                            )}
-                            <button
-                              type="button"
-                              disabled={!scheduleAt}
-                              onClick={() => {
-                                setScheduleOpen(false);
-                                handleSendCompose();
-                              }}
-                              className="inline-flex items-center gap-1 rounded bg-[#701CC0] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5F17A5] disabled:opacity-40"
-                            >
-                              <FiClock className="h-3.5 w-3.5" aria-hidden /> Schedule send
-                            </button>
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="relative shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setConfidentialOpen((open) => !open)}
-                        title="Confidential mode"
-                        aria-label="Confidential mode"
-                        aria-pressed={confidentialOn}
-                        className={composeIconClass(confidentialOn || confidentialOpen)}
-                      >
-                        <FiLock className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      {confidentialOpen ? (
-                        <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
-                          <label className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-semibold text-[#1E1B2E]">Confidential mode</span>
-                            <input
-                              type="checkbox"
-                              checked={confidentialOn}
-                              onChange={(event) => setConfidentialOn(event.target.checked)}
-                              className="h-4 w-4"
-                            />
-                          </label>
-                          <p className="mt-1 text-[11px] leading-relaxed text-[#6B7280]">
-                            Sends a secure link instead of the body. Recipients can’t forward, copy, or print, and access can expire or be revoked.
-                          </p>
-                          {confidentialOn ? (
-                            <div className="mt-3 space-y-2">
-                              <div>
-                                <label htmlFor="conf-expiry" className="mb-1 block text-[11px] font-medium text-[#6B7280]">
-                                  Expires
-                                </label>
-                                <select
-                                  id="conf-expiry"
-                                  value={confidentialExpiry}
-                                  onChange={(event) => setConfidentialExpiry(event.target.value as typeof confidentialExpiry)}
-                                  className="w-full rounded border border-[#E5E7EB] px-2 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
-                                >
-                                  <option value="1d">1 day</option>
-                                  <option value="1w">1 week</option>
-                                  <option value="1m">1 month</option>
-                                  <option value="never">No expiry</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label htmlFor="conf-passcode" className="mb-1 block text-[11px] font-medium text-[#6B7280]">
-                                  Passcode (optional — share separately)
-                                </label>
-                                <input
-                                  id="conf-passcode"
-                                  type="text"
-                                  value={confidentialPasscode}
-                                  onChange={(event) => setConfidentialPasscode(event.target.value)}
-                                  placeholder="e.g. 4821"
-                                  className="w-full rounded border border-[#E5E7EB] px-2.5 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
-                                />
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setRequestReceipt((on) => !on)}
-                      title="Request read receipt"
-                      aria-label="Request read receipt"
-                      aria-pressed={requestReceipt}
-                      className={composeIconClass(requestReceipt)}
-                    >
-                      <FiCheckSquare className="h-[18px] w-[18px]" aria-hidden />
-                    </button>
-                    <div className="relative shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setArtemisRewriteOpen((open) => !open)}
-                        disabled={artemisDrafting}
-                        title="Artemis AI"
-                        aria-label="Artemis AI"
-                        aria-expanded={artemisRewriteOpen}
-                        className={composeIconClass(artemisRewriteOpen || artemisDrafting)}
-                      >
-                        <FiZap className={`h-[18px] w-[18px] ${artemisDrafting ? "animate-pulse" : ""}`} aria-hidden />
-                      </button>
-                      {artemisRewriteOpen ? (
-                        <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 w-52">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setArtemisRewriteOpen(false);
-                              void handleArtemisDraft();
-                            }}
-                            disabled={artemisDrafting}
-                            className={composeMenuItemClass}
-                          >
-                            <FiZap className="h-4 w-4 shrink-0" aria-hidden />
-                            {artemisDrafting ? "Drafting…" : "Draft for me"}
-                          </button>
-                          <div className="my-1 h-px bg-white/[0.07]" />
-                          <p className="px-3 pb-1 pt-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
-                            Rewrite
-                          </p>
-                          {([
-                            ["shorten", "Make shorter"],
-                            ["expand", "Expand"],
-                            ["formal", "More formal"],
-                            ["casual", "More casual"],
-                            ["grammar", "Fix grammar"],
-                          ] as const).map(([mode, label]) => (
-                            <button
-                              key={mode}
-                              type="button"
-                              onClick={() => handleArtemisRewrite(mode)}
-                              disabled={artemisDrafting || !composeBody.trim()}
-                              className={composeMenuItemClass}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="relative flex min-w-0 items-center gap-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setComposeFormattingToolbarOpen((open) => !open)}
-                        className={composeIconClass(composeFormattingToolbarOpen)}
-                        title="Formatting options"
-                        aria-label="Formatting options"
-                        aria-pressed={composeFormattingToolbarOpen}
-                      >
-                        <FiType className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => composeAttachInputRef.current?.click()}
-                        className={composeIconClass()}
-                        title="Attach files"
-                        aria-label="Attach files"
-                      >
-                        <FiPaperclip className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      <div className="relative shrink-0">
-                        <button
-                          type="button"
-                          onClick={toggleBookingMenu}
-                          className={composeIconClass(bookingMenuOpen)}
-                          title="Insert booking link"
-                          aria-label="Insert booking link"
-                          aria-expanded={bookingMenuOpen}
-                        >
-                          <FiCalendar className="h-[18px] w-[18px]" aria-hidden />
-                        </button>
-                        {bookingMenuOpen ? (
-                          <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 w-64">
-                            {composeBookingLinks.length === 0 ? (
-                              <p className="px-3 py-2 text-xs leading-relaxed text-[#8C86A6]">
-                                No active booking links. Create one in Settings → Meeting booking.
-                              </p>
-                            ) : (
-                              composeBookingLinks.map((l) => (
-                                <button
-                                  key={l.id}
-                                  type="button"
-                                  onClick={() => insertBookingLink(l.slug, l.title)}
-                                  className={`${composeMenuItemClass} truncate`}
-                                >
-                                  {l.title}
-                                </button>
-                              ))
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => composeEditorRef.current?.promptInsertLink()}
-                        className={composeIconClass()}
-                        title="Insert link"
-                        aria-label="Insert link"
-                      >
-                        <FiLink className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => composeEditorRef.current?.promptInsertImage()}
-                        className={composeIconClass()}
-                        title="Insert image"
-                        aria-label="Insert image"
-                      >
-                        <FiImage className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      {/* Gmail keeps its second-tier actions behind one "More options" button rather
-                          than a second row of controls — templates, signatures, print and the
-                          signature request live here so the bar stays a single line. */}
-                      <div className="relative shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setComposeMoreOpen((open) => !open)}
-                          className={composeIconClass(composeMoreOpen)}
-                          title="More options"
-                          aria-label="More options"
-                          aria-expanded={composeMoreOpen}
-                        >
-                          <FiMoreVertical className="h-[18px] w-[18px]" aria-hidden />
-                        </button>
-                        {composeMoreOpen ? (
-                          <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 max-h-[min(60vh,22rem)] w-60 overflow-y-auto">
-                            <p className="px-3 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
-                              Templates
-                            </p>
-                            {composeTemplates.length === 0 ? (
-                              <p className="px-3 pb-1.5 text-xs text-[#8C86A6]">No templates yet</p>
-                            ) : (
-                              composeTemplates.map((template) => (
-                                <button
-                                  key={template.id}
-                                  type="button"
-                                  className={`${composeMenuItemClass} truncate`}
-                                  onClick={() => {
-                                    setComposeMoreOpen(false);
-                                    applyComposeTemplate(template.id);
-                                  }}
-                                >
-                                  <FiFileText className="h-4 w-4 shrink-0" aria-hidden />
-                                  <span className="truncate">{template.name}</span>
-                                </button>
-                              ))
-                            )}
-                            <button
-                              type="button"
-                              className={`${composeMenuItemClass} text-[#C8A6F5]`}
-                              onClick={() => {
-                                setComposeMoreOpen(false);
-                                setSaveTemplateName("");
-                                setSaveTemplateModalOpen(true);
-                              }}
-                            >
-                              <FiPlus className="h-4 w-4 shrink-0" aria-hidden />
-                              Save as template…
-                            </button>
-
-                            <div className="my-1 h-px bg-white/[0.07]" />
-                            <p className="px-3 pb-1 pt-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
-                              Signatures
-                            </p>
-                            {composeSignatures.length === 0 ? (
-                              <p className="px-3 pb-1.5 text-xs text-[#8C86A6]">No signatures yet</p>
-                            ) : (
-                              composeSignatures.map((sig) => (
-                                <button
-                                  key={sig.id}
-                                  type="button"
-                                  className={`${composeMenuItemClass} truncate`}
-                                  onClick={() => {
-                                    setComposeMoreOpen(false);
-                                    applyComposeSignature(sig.id);
-                                  }}
-                                >
-                                  <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
-                                  <span className="truncate">
-                                    {sig.name}
-                                    {sig.isDefault ? " (default)" : ""}
-                                  </span>
-                                </button>
-                              ))
-                            )}
-
-                            <div className="my-1 h-px bg-white/[0.07]" />
-                            <button
-                              type="button"
-                              className={composeMenuItemClass}
-                              onClick={() => {
-                                setComposeMoreOpen(false);
-                                setSignModalOpen(true);
-                              }}
-                            >
-                              <FiFeather className="h-4 w-4 shrink-0" aria-hidden />
-                              Request signature
-                            </button>
-                            <button
-                              type="button"
-                              className={composeMenuItemClass}
-                              onClick={() => {
-                                setComposeMoreOpen(false);
-                                handlePrintCompose();
-                              }}
-                            >
-                              <FiPrinter className="h-4 w-4 shrink-0" aria-hidden />
-                              Print
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeCompose}
-                    className={composeIconClass()}
-                    title="Discard draft"
-                    aria-label="Discard draft"
-                  >
-                    <FiTrash2 className="h-[18px] w-[18px]" aria-hidden />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <SignPdfModal
-        open={signModalOpen}
-        onClose={() => setSignModalOpen(false)}
-        defaultSignerEmail={composeTo.split(",")[0]?.trim() || ""}
-        pdfCandidates={composeAttachments
-          .filter((a) => a.contentType === "application/pdf" || a.filename.toLowerCase().endsWith(".pdf"))
-          .map((a) => ({ id: a.id, filename: a.filename, contentBase64: a.contentBase64 }))}
-        onLinkReady={(url: string, filename: string) =>
-          composeEditorRef.current?.insertLink(url, `Sign “${filename}”`)
-        }
-      />
-
-      {saveTemplateModalOpen ? (
-        <div
-          className="fixed inset-0 z-[130] flex items-center justify-center bg-[#2E1050]/45 backdrop-blur-sm p-4"
-          onClick={() => !saveTemplateSaving && setSaveTemplateModalOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 p-5 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)]"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-label="Save template"
-          >
-            <p className="text-sm font-semibold text-[#1E1B2E]">Save template</p>
-            <label className="mt-3 block text-xs font-medium text-[#5f6368]" htmlFor="compose-template-name">
-              Name
-            </label>
-            <input
-              id="compose-template-name"
-              type="text"
-              value={saveTemplateName}
-              onChange={(event) => setSaveTemplateName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-[#EAE5F4] px-3 py-2 text-sm text-[#1E1B2E] outline-none focus:ring-2 focus:ring-[#701CC0]"
-              placeholder="Template name"
-              disabled={saveTemplateSaving}
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={saveTemplateSaving}
-                onClick={() => setSaveTemplateModalOpen(false)}
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={saveTemplateSaving || !saveTemplateName.trim()}
-                onClick={() => void handleSaveComposeTemplate()}
-                className="rounded-md bg-[#701CC0] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#5f17a5] disabled:opacity-50"
-              >
-                {saveTemplateSaving ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ComposeWindow compose={compose} />
+      <ContactsModals contacts={contacts} />
+      {showShortcutsHelp && <KeyboardShortcutsModal onClose={() => setShowShortcutsHelp(false)} />}
 
       <SuccessStatusModal
         isOpen={blockSuccessModal.open}
@@ -7302,167 +3590,6 @@ ${sourceText}`;
         message={blockSuccessModal.message}
         onClose={() => setBlockSuccessModal({ open: false, title: "", message: "" })}
         buttonLabel="Done"
-      />
-      <SuccessStatusModal
-        isOpen={contactsImportSuccessOpen}
-        title="CSV Uploaded Successfully"
-        message="Your CSV data has been imported and contacts are now updated."
-        onClose={() => setContactsImportSuccessOpen(false)}
-        buttonLabel="Done"
-      />
-      {contactsImportIssuesModal.open ? (
-        <div
-          className="fixed inset-0 z-[170] flex items-center justify-center bg-[#2E1050]/30 backdrop-blur-md p-4"
-          onClick={() =>
-            setContactsImportIssuesModal({
-              open: false,
-              imported: 0,
-              skipped: 0,
-              headerErrors: [],
-              rowErrors: [],
-            })
-          }
-        >
-          <div
-            className="w-full max-w-4xl rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] p-6 max-h-[90vh] overflow-y-auto"
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="CSV Import Issues"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                <FiAlertCircle className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-[#1E1B2E]">CSV Import Validation</h3>
-                <p className="text-sm text-[#6B7280]">
-                  Imported {contactsImportIssuesModal.imported} valid contact
-                  {contactsImportIssuesModal.imported === 1 ? "" : "s"} and skipped {contactsImportIssuesModal.skipped} invalid line
-                  {contactsImportIssuesModal.skipped === 1 ? "" : "s"}.
-                </p>
-              </div>
-            </div>
-
-            {contactsImportIssuesModal.headerErrors.length > 0 ? (
-              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <p className="text-sm font-semibold text-red-700">Header Errors</p>
-                <ul className="mt-2 space-y-1.5 text-xs text-red-700">
-                  {contactsImportIssuesModal.headerErrors.map((error, index) => (
-                    <li key={`${error}-${index}`}>- {error}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {contactsImportIssuesModal.rowErrors.length > 0 ? (
-              <div className="mt-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-amber-800">
-                    Correct the {contactsImportIssuesModal.rowErrors.length} skipped row
-                    {contactsImportIssuesModal.rowErrors.length === 1 ? "" : "s"} below and save them individually, or fix
-                    everything then Save All.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={retryAllIssueRows}
-                    disabled={contactsImportIssuesModal.rowErrors.some((row) => row.saving)}
-                    className="shrink-0 rounded-lg bg-[#701CC0] text-white text-xs font-medium px-3 py-1.5 hover:bg-[#5f17a5] disabled:opacity-60"
-                  >
-                    Save All
-                  </button>
-                </div>
-                <div className="mt-2 max-h-[50vh] overflow-y-auto space-y-3 pr-1">
-                  {contactsImportIssuesModal.rowErrors.map((row) => (
-                    <div key={row.lineNumber} className="rounded-lg border border-amber-200 bg-white px-3 py-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs font-semibold text-amber-900">Line {row.lineNumber}</p>
-                        <button
-                          type="button"
-                          onClick={() => retryImportIssueRow(row.lineNumber)}
-                          disabled={row.saving}
-                          className="shrink-0 rounded-md bg-[#701CC0] text-white text-xs font-medium px-3 py-1 hover:bg-[#5f17a5] disabled:opacity-60"
-                        >
-                          {row.saving ? "Saving..." : "Save Row"}
-                        </button>
-                      </div>
-                      <ul className="mt-1 space-y-0.5 text-xs text-red-600">
-                        {row.reasons.map((reason, reasonIndex) => (
-                          <li key={`${reason}-${reasonIndex}`}>- {reason}</li>
-                        ))}
-                      </ul>
-                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {ISSUE_EDITABLE_FIELDS.map((field) => (
-                          <label key={field} className="text-[11px] font-medium text-[#6B7280] flex flex-col gap-0.5">
-                            {ISSUE_FIELD_LABELS[field]}
-                            <input
-                              value={row[field]}
-                              onChange={(event) => updateIssueRowField(row.lineNumber, field, event.target.value)}
-                              disabled={row.saving}
-                              className="rounded-md border border-[#E5E7EB] px-2 py-1 text-xs text-[#1E1B2E] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/40 disabled:opacity-60"
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={() =>
-                  setContactsImportIssuesModal({
-                    open: false,
-                    imported: 0,
-                    skipped: 0,
-                    headerErrors: [],
-                    rowErrors: [],
-                  })
-                }
-                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5]"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      <ConfirmActionModal
-        isOpen={Boolean(contactToDelete)}
-        title="Delete Contact"
-        message={
-          <>
-            Are you sure you want to delete{" "}
-            <span className="font-semibold text-[#1E1B2E]">{contactToDelete?.email || "this contact"}</span>?
-            This action cannot be undone.
-          </>
-        }
-        confirmLabel={deletingContact ? "Deleting..." : "Delete Contact"}
-        onCancel={() => {
-          if (deletingContact) return;
-          setContactToDelete(null);
-        }}
-        onConfirm={confirmDeleteContact}
-      />
-      <ConfirmActionModal
-        isOpen={confirmBulkDeleteContacts}
-        title="Delete Contacts"
-        message={
-          <>
-            Are you sure you want to delete{" "}
-            <span className="font-semibold text-[#1E1B2E]">{selectedContactIds.length} contacts</span>? This action
-            cannot be undone.
-          </>
-        }
-        confirmLabel={bulkContactActionLoading ? "Deleting..." : "Delete Contacts"}
-        onCancel={() => {
-          if (bulkContactActionLoading) return;
-          setConfirmBulkDeleteContacts(false);
-        }}
-        onConfirm={confirmBulkDeleteContactsAction}
       />
       <ConfirmActionModal
         isOpen={confirmHardDelete}
@@ -7538,24 +3665,27 @@ ${sourceText}`;
           void submitNewLabel(values.name);
         }}
       />
-      <PromptModal
-        open={artemisPromptOpen}
-        title="Draft with Artemis"
-        description="Describe what this email should say. Artemis writes a first draft you can edit before sending."
-        fields={[{ name: "intent", type: "textarea", placeholder: "e.g. Follow up on our call and propose next week for a quick demo", required: true, maxLength: 2000 }]}
-        confirmLabel="Draft it"
-        busy={artemisDrafting}
-        onCancel={() => setArtemisPromptOpen(false)}
-        onSubmit={(values) => void runArtemisDraft(values.intent)}
-      />
-      {sentToastMessage ? (
+      {sentToast ? (
         <div
           className="fixed bottom-6 left-6 z-[220] flex max-w-sm items-center gap-3 rounded-lg border border-[#701CC0]/40 bg-[#701CC0] px-4 py-3 text-sm font-medium text-white shadow-lg shadow-[#701CC0]/30"
           role="status"
           aria-live="polite"
         >
           <FiCheck className="h-5 w-5 shrink-0 text-white" aria-hidden />
-          <span>{sentToastMessage}</span>
+          <span>{sentToast.message}</span>
+          {sentToast.undo ? (
+            <button
+              type="button"
+              className="ml-1 shrink-0 rounded-md border border-white/40 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white transition hover:bg-white/10"
+              onClick={() => {
+                sentToast.undo?.();
+                if (sentToastTimerRef.current) clearTimeout(sentToastTimerRef.current);
+                setSentToast(null);
+              }}
+            >
+              Undo
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

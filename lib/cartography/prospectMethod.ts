@@ -114,15 +114,22 @@ export async function persistCompletedProspectJob(params: {
   goal: string;
   payload: unknown;
 }): Promise<{ runId: string } | null> {
-  const existing = await prisma.cartographyRun.findUnique({ where: { prospect_job_id: params.jobId } });
-  if (existing) return { runId: existing.id };
-
   const { tasks, candidates } = prospectResultToRunResult(params.payload);
   // Mirrors computeRunStatus's rule from persistRun.ts (kept separate: its input type is scoped
   // to the three sub-agent methods, not "prospect").
   const status = tasks.every((t) => t.status === "failed") ? "failed" : candidates.length > 0 ? "review_pending" : "completed";
 
   try {
+    // Moved inside the try (was a bare call above it) — this function's whole contract is "never
+    // costs the caller its already-found candidates, returns null on failure instead," which an
+    // unguarded call here defeated: any failure surfacing this dedup lookup (including the schema
+    // drift found live — cartography_runs.prospect_job_id missing until
+    // prisma/manual/20260911_cartography_prospect_method.sql is applied) propagated straight to
+    // pages/api/cartography/agent/persist.ts's caller as an uncaught 500 instead of the graceful
+    // `null` this function is meant to hand back.
+    const existing = await prisma.cartographyRun.findUnique({ where: { prospect_job_id: params.jobId } });
+    if (existing) return { runId: existing.id };
+
     const run = await prisma.cartographyRun.create({
       data: {
         company_id: params.companyId,
@@ -176,9 +183,16 @@ export async function persistCompletedProspectJob(params: {
   } catch (error) {
     // Same "a persistence failure never costs the caller its already-found candidates" posture
     // as persistCartographyRun -- but here a conflict specifically means another poll already
-    // won the race, so re-check rather than treating every failure as a lost write.
-    const raced = await prisma.cartographyRun.findUnique({ where: { prospect_job_id: params.jobId } });
-    if (raced) return { runId: raced.id };
+    // won the race, so re-check rather than treating every failure as a lost write. Guarded
+    // separately: if the original failure means this exact query can't succeed either (e.g. the
+    // schema-drift case in the comment above), this must not throw a second time out of the catch
+    // block itself.
+    try {
+      const raced = await prisma.cartographyRun.findUnique({ where: { prospect_job_id: params.jobId } });
+      if (raced) return { runId: raced.id };
+    } catch {
+      /* falls through to the same "give up gracefully" return below */
+    }
     console.error("[cartography] failed to persist prospect run:", error);
     return null;
   }

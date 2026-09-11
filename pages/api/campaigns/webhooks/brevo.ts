@@ -122,7 +122,12 @@ async function processEvent(eventType: string, messageId: string): Promise<void>
         where: { id: campaignContactId },
         select: { contact_email: true },
       });
-      if (contact) await addToDnc(campaignId, contact.contact_email, "bounce");
+      // A row deleted since the outbound send (e.g. a CCPA/CPRA erasure) would otherwise make the
+      // update below throw P2025, swallowed by processWebhook's per-event catch — the whole
+      // bounce/DNC handling silently never happens, with no retry possible since Brevo already
+      // got a 200 for this event. Same guard the "unsubscribed" case below already has.
+      if (!contact) return;
+      await addToDnc(campaignId, contact.contact_email, "bounce");
       await prisma.campaignContact.update({
         where: { id: campaignContactId },
         data: { queue_status: "failed", skip_reason: eventType },
@@ -143,7 +148,10 @@ async function processEvent(eventType: string, messageId: string): Promise<void>
         where: { id: campaignContactId },
         select: { contact_email: true },
       });
-      if (contact) await addToDnc(campaignId, contact.contact_email, "spam_complaint");
+      // Same reasoning as the bounce cases above — a missing row would otherwise throw P2025 on
+      // the update, silently dropping the DNC add with no retry.
+      if (!contact) return;
+      await addToDnc(campaignId, contact.contact_email, "spam_complaint");
       await prisma.campaignContact.update({
         where: { id: campaignContactId },
         data: { queue_status: "failed", skip_reason: "spam_complaint" },
