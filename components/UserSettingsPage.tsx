@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
+import Modal from "@/components/ui/Modal";
+import {
+  PANEL_FIELD,
+  PANEL_FIELD_INVALID,
+  PanelFieldLabel,
+  PanelModalFooter,
+  PanelModalHeader,
+} from "@/components/ui/PanelForm";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import { FiChevronDown, FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
@@ -18,6 +26,26 @@ interface UserSettingsPageProps {
   onClose?: () => void;
   variant?: "panel" | "dark";
   userRole?: string | null;
+  /**
+   * Renders someone else's settings for staff to look at: every control that would change the
+   * account is hidden, because a staff member must not rename a client, replace their picture or
+   * set their password from here. Read-only by construction rather than by asking nicely.
+   */
+  readOnly?: boolean;
+  /** Whose billing to read when this is somebody else's page. */
+  billingCompanyId?: string | null;
+  /**
+   * Fired after any change that the rest of the panel renders from — a saved setting, a new
+   * picture, a reset picture. The panel re-reads its own server data on this, so the sidebar
+   * matches what was just saved instead of showing the previous value until a manual reload.
+   */
+  onSettingsUpdate?: () => void;
+  /**
+   * Staff viewing a client may change that client's settings — theme, language, notifications,
+   * two-factor — which is what the client view is for. It does NOT unlock identity: their name,
+   * picture and password stay theirs, and `readOnly` still governs those.
+   */
+  canManageClient?: boolean;
 }
 
 type GmailAccountConnection = {
@@ -38,6 +66,19 @@ type DetectedCalendarAccount = {
   email: string;
   connected: boolean;
   calendars: DetectedCalendar[];
+};
+
+/**
+ * What a client has connected, as /api/client/settings reports it. Separate from the types above
+ * because those describe the signed-in user's own connections, which is a different person on a
+ * read-only page.
+ */
+type ClientConnections = {
+  google: { email: string; expiresAt: string | null; needsReconnect: boolean }[];
+  linkedin: boolean;
+  facebook: boolean;
+  googleads: boolean;
+  mailboxes: { email: string; label: string | null }[];
 };
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -89,7 +130,10 @@ const SettingsCard: React.FC<{
   </div>
 );
 
-const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null }) => {
+/** Only what this card shows; the billing page reads the rest from the same endpoint. */
+const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null, readOnly = false, billingCompanyId = null, canManageClient = false, onSettingsUpdate }) => {
+  /** Whether the settings controls (not the identity ones) accept input on this page. */
+  const settingsEditable = !readOnly || (canManageClient && !!billingCompanyId);
   const [name, setName] = useState(user.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -101,6 +145,12 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     language: "en"
   });
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  /** Read-only pages only: the client's settings could not be read, so say so rather than
+   *  rendering the defaults as if they were theirs. */
+  const [settingsUnavailable, setSettingsUnavailable] = useState(false);
+  /** Read-only pages only: the CLIENT's own connections, from /api/client/settings. Kept apart
+   *  from socialConnections/gmailAccounts, which are always the session user's. */
+  const [clientConnections, setClientConnections] = useState<ClientConnections | null>(null);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -148,21 +198,66 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   }, [userRoleProp]);
 
   useEffect(() => {
+    /**
+     * Two sources, one shape.
+     *
+     * On your own page these come from user_preferences. On a client's page they come from that
+     * client's own row — reading your preferences there would have shown YOUR theme and
+     * notification setting under their name, which is worse than showing nothing, and is why
+     * these cards used to be hidden in readOnly instead.
+     *
+     * When a client's settings cannot be read, the cards say so. The state object holds defaults
+     * (notifications on, theme auto, English) and rendering those unlabelled would be the same
+     * lie in a quieter form — a staff member cannot tell a real setting from a placeholder.
+     */
+    const endpoint = readOnly
+      ? billingCompanyId
+        ? `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+        : null
+      : "/api/profile/getSettings";
+
+    if (!endpoint) {
+      /**
+       * No company named yet — the client view mounts this before viewClient is set. That is not
+       * a failure, and treating it as one is what made the cards flash "could not be loaded" for
+       * a beat before the real data replaced them. Staying in the loading state shows the
+       * skeleton until there is something to ask for.
+       */
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsLoadingSettings(true);
+      setSettingsUnavailable(false);
+      return;
+    }
+
+    let cancelled = false;
     const loadSettings = async () => {
       try {
-        const response = await fetch("/api/profile/getSettings");
+        // Re-entering the loading state on every run, so switching client does not show the
+        // previous one's values until the new ones land.
+        setIsLoadingSettings(true);
+        const response = await fetch(endpoint);
         if (response.ok) {
-          const settingsData = await response.json();
-          setSettings(settingsData);
+          const { connections, ...settingsData } = await response.json();
+          if (!cancelled) {
+            setSettings((prev) => ({ ...prev, ...settingsData }));
+            setClientConnections((connections as ClientConnections | undefined) ?? null);
+            setSettingsUnavailable(false);
+          }
+        } else if (!cancelled) {
+          setSettingsUnavailable(true);
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
+        if (!cancelled) setSettingsUnavailable(true);
       } finally {
-        setIsLoadingSettings(false);
+        if (!cancelled) setIsLoadingSettings(false);
       }
     };
     loadSettings();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [readOnly, billingCompanyId]);
 
   const loadSocialConnections = async () => {
     setSocialLoading(true);
@@ -298,6 +393,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   };
 
   useEffect(() => {
+    /**
+     * Skipped entirely on someone else's page. All three read the SESSION user's connections —
+     * /api/gmail/status, /api/google-calendar/calendars and the social status routes are all
+     * scoped to whoever is logged in — so on a client's settings page they loaded the staff
+     * member's own Google accounts, calendars and LinkedIn and rendered them under the client's
+     * name. The client's own connections come from /api/client/settings instead.
+     */
+    if (readOnly) return;
     // See the note below: these are mount-only loaders that each set their own state after awaiting.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSocialConnections();
@@ -306,7 +409,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     // Mount-only on purpose. These loaders are plain functions, recreated on every render, so
     // listing them as dependencies would refetch all three on each render rather than once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [readOnly]);
 
   // Keep the role-gated sections (Gmail, calendars, social) in sync with an admin
   // changing this user's role elsewhere, without waiting on a full page reload.
@@ -380,20 +483,37 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setUpdateMessage(null);
     
     try {
-      const response = await fetch("/api/profile/updateName", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
+      /**
+       * A client's name is on their own row; yours is on your user. Posting a client's rename to
+       * the profile route would have renamed the staff member doing the renaming.
+       */
+      const managingClient = readOnly && canManageClient && billingCompanyId;
+      const response = await fetch(
+        managingClient
+          ? `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+          : "/api/profile/updateName",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to update name");
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body?.message || "Failed to update name");
       }
 
-      const userData = await fetchUserData();
-      if (userData) {
-        setName(userData.name || "");
-        onNameUpdate?.(userData.name);
+      if (managingClient) {
+        const saved = await response.json().catch(() => ({}));
+        setName(saved?.name ?? name);
+        onNameUpdate?.(saved?.name ?? name);
+      } else {
+        const userData = await fetchUserData();
+        if (userData) {
+          setName(userData.name || "");
+          onNameUpdate?.(userData.name);
+        }
       }
       
       setShowSuccessModal(true);
@@ -409,13 +529,22 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const handleSettingsUpdate = async (newSettings: Partial<typeof settings>) => {
     setIsUpdating(true);
     setUpdateMessage(null);
-    
+
     try {
-      const response = await fetch("/api/profile/updateSettings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newSettings),
-      });
+      // A client's settings live on their own row and are written through the client route; your
+      // own live in user_preferences. Posting a client's change to the profile route would have
+      // silently changed the staff member's own settings instead.
+      const managingClient = readOnly && canManageClient && billingCompanyId;
+      const response = await fetch(
+        managingClient
+          ? `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+          : "/api/profile/updateSettings",
+        {
+          method: managingClient ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newSettings),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to update settings");
@@ -423,6 +552,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       const result = await response.json();
       setSettings(result);
+      // Tell the panel, so anything rendered from these values outside this page follows the
+      // change immediately rather than at the next full reload.
+      onSettingsUpdate?.();
       setShowSuccessModal(true);
       setUpdateMessage(null);
     } catch (error) {
@@ -459,6 +591,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           }
 
           onImageUpdate?.();
+      onSettingsUpdate?.();
           
           setShowSuccessModal(true);
           setUpdateMessage(null);
@@ -514,6 +647,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       }
 
       onImageUpdate?.();
+      onSettingsUpdate?.();
       
       setShowSuccessModal(true);
       setUpdateMessage(null);
@@ -669,119 +803,100 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const textSecondary = isDark ? "text-white/70" : "text-[#6B7280]";
   const inputBg = isDark ? "bg-white/10 border-white/20 text-white placeholder-white/50" : "bg-white border-[#E5E7EB]";
   const pageBg = isDark ? "bg-transparent" : "bg-white";
-  const canManageGmailAccounts = ["user", "admin", "staff"].includes(userRole || "");
+  // Google accounts belong to whoever is signed in, so they are never part of someone else's page.
+  const canManageGmailAccounts = !readOnly && ["user", "admin", "staff"].includes(userRole || "");
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
+  // The email panel's settings render on a dark card, where the light tint disappears entirely.
+  const skeletonTint = isDark ? "bg-white/10" : "bg-[#F1EFF6]";
+
+  /**
+   * Shown until the settings request lands, so the page arrives once rather than in pieces.
+   *
+   * The cards used to render immediately against their defaults — an empty name, every toggle
+   * off, the language on its first option — and then rearrange themselves when the real values
+   * came back. The shapes here match the cards they stand in for, so nothing moves when they are
+   * swapped out.
+   */
+  const cardsSkeleton = (
+    <div className="space-y-4" aria-hidden>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        {[0, 1, 2].map((card) => (
+          <div key={card} className={`rounded-2xl ${cardBg} border p-5`}>
+            <div className="mb-5 flex items-center gap-2">
+              <div className={`h-7 w-7 animate-pulse rounded-lg ${skeletonTint}`} />
+              <div className={`h-3.5 w-24 animate-pulse rounded ${skeletonTint}`} />
+            </div>
+            {card === 0 && <div className={`mb-5 h-24 w-24 animate-pulse rounded-full ${skeletonTint}`} />}
+            <div className="space-y-4">
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="space-y-1.5">
+                  <div className={`h-2.5 w-20 animate-pulse rounded ${skeletonTint}`} />
+                  <div className={`h-9 w-full animate-pulse rounded-[10px] ${skeletonTint}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {[0, 1].map((card) => (
+        <div key={card} className={`rounded-2xl ${cardBg} border p-5`}>
+          <div className="mb-5 flex items-center gap-2">
+            <div className={`h-7 w-7 animate-pulse rounded-lg ${skeletonTint}`} />
+            <div className={`h-3.5 w-32 animate-pulse rounded ${skeletonTint}`} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {[0, 1, 2].map((cell) => (
+              <div key={cell} className={`h-16 animate-pulse rounded-xl ${skeletonTint}`} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const cardsContent = (
     /* A grid, not CSS columns. Masonry filled both sides of the page but let each card start
        wherever the previous one happened to end, so nothing lined up with anything and the page
-       read as a pile of boxes. Rows here are explicit: profile spans the width, security and
-       preferences share the row under it, and the wide cards below span again. */
+       read as a pile of boxes. Rows here are explicit: profile, security and preferences share
+       the top row, and the wide cards below span the width. */
     <div className="space-y-4">
-      
-      <div className={`rounded-2xl ${cardBg} border p-5`}>
-        <div className="flex flex-col sm:flex-row gap-6">
-          <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
-            <div className="relative inline-block">
-              <ProfileImage
-                src={user.image}
-                alt={displayName}
-                name={displayName}
-                size={96}
-                className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
-                priority
-                quality={100}
-              />
-              <button
-                onClick={() => setShowAvatarMenu(!showAvatarMenu)}
-                className="absolute bottom-0 right-0 bg-[#701CC0] text-white rounded-full p-2 hover:bg-[#5f17a5] transition-colors shadow-lg"
-              >
-                <FiEdit3 className="w-4 h-4" />
-              </button>
-            </div>
-            {showAvatarMenu && (
-              <div className={`absolute top-full left-0 mt-2 w-48 rounded-xl shadow-xl border py-2 z-20 ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-gray-100"}`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImageUpload(file);
-                    }
-                    e.target.value = "";
-                  }}
-                  className="hidden"
-                  id="image-upload"
-                  disabled={isUpdating}
-                />
-                <label
-                  htmlFor="image-upload"
-                  className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  <FiUpload className="w-4 h-4" />
-                  {isUpdating ? "Uploading..." : "Upload Image"}
-                </label>
-                {user.image && (
-                  <button
-                    onClick={handleImageReset}
-                    disabled={isUpdating}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm w-full text-left transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <FiRotateCcw className="w-4 h-4" />
-                    {isUpdating ? "Resetting..." : "Reset To Default"}
-                  </button>
-                )}
-              </div>
-            )}
+      {/* items-stretch, not items-start: the three cards in this row are meant to read as one
+          band, and start let each one shrink to whatever it happened to contain. */}
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+      <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
+        {/* Heading first, then the details, with the picture beside them — the picture is the
+            least of the three and was leading the card. */}
+        <div className="mb-4 flex items-center gap-2">
+          <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
+            <FiUser className="w-4 h-4 text-[#701CC0]" />
           </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
-                <FiUser className="w-4 h-4 text-[#701CC0]" />
-              </div>
-              <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
-            </div>
-
+        <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
+        </div>
+        {/* gap-3 and no flex-1 on the details: flex-1 let the name/email block absorb all the
+            spare width in the card, which pinned the picture to the far right edge with a wide
+            empty channel between the two. They belong together as one unit, so the details take
+            their content width and the picture sits directly beside them. */}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0">
             <div className="space-y-4">
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
-                {isEditingName ? (
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className={`flex-1 min-w-[180px] rounded-xl px-4 py-2.5 border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${inputBg}`}
-                      placeholder="Enter your name"
-                      autoFocus
-                    />
+                <div className="flex items-center gap-2">
+                  <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
+                  {/* A managing admin may rename a client — that is what the client view is
+                      for. Their picture and password are not offered here: a credential is not
+                      an ordinary field, and the avatar upload writes to the signed-in user's own
+                      storage, so it would replace the staff member's picture, not the client's. */}
+                  {settingsEditable && (
                     <button
-                      onClick={handleNameUpdate}
-                      disabled={isUpdating}
-                      className="px-4 py-2.5 bg-[#701CC0] text-white rounded-xl hover:bg-[#5f17a5] disabled:opacity-50 text-sm font-medium transition-colors"
-                    >
-                      {isUpdating ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      onClick={() => { setName(user.name || (user.email ? user.email.split("@")[0] : "") || ""); setIsEditingName(false); setUpdateMessage(null); }}
-                      className="px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 text-sm font-medium transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
-                    <button
-                      onClick={() => setIsEditingName(true)}
+                      type="button"
+                      onClick={() => { setName(user.name || ""); setIsEditingName(true); }}
                       className="text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5]"
                     >
                       Edit
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Email</label>
@@ -804,13 +919,82 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             )}
           </div>
+          {/* mx-auto, so the leftover width in the row splits evenly either side of the picture
+              and it lands halfway between the details and the card edge. flex-1 on the details
+              put it hard right; nothing at all put it hard against the text. */}
+          <div className="relative shrink-0 mx-auto" ref={avatarMenuRef}>
+            <div className="relative inline-block">
+              <ProfileImage
+                src={user.image}
+                alt={displayName}
+                name={displayName}
+                size={112}
+                className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
+                priority
+                quality={100}
+              />
+              {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setShowAvatarMenu(!showAvatarMenu)}
+                aria-label="Change profile picture"
+                aria-expanded={showAvatarMenu}
+                className="absolute bottom-0 right-0 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#701CC0] text-white ring-2 ring-white transition-colors hover:bg-[#5f17a5]"
+              >
+                <FiEdit3 className="h-4 w-4" />
+              </button>
+              )}
+            </div>
+            {showAvatarMenu && (
+              <div
+                role="menu"
+                aria-label="Profile picture"
+                className={`absolute right-0 top-full z-20 mt-1.5 w-[188px] rounded-xl border p-1 shadow-[0_10px_28px_-8px_rgba(16,24,40,0.22)] ${isDark ? "border-white/20 bg-[#2E0A4F]" : "border-[#E4E0EC] bg-white"}`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageUpload(file);
+                    }
+                    e.target.value = "";
+                  }}
+                  className="hidden"
+                  id="image-upload"
+                  disabled={isUpdating}
+                />
+                <label
+                  htmlFor="image-upload"
+                  className={`flex h-8 cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-[13px] transition-colors ${isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"} ${isUpdating ? "cursor-not-allowed opacity-45" : ""}`}
+                >
+                  <FiUpload className={`h-3.5 w-3.5 shrink-0 ${isDark ? "" : "text-[#9CA3AF]"}`} />
+                  {isUpdating ? "Uploading..." : "Upload Image"}
+                </label>
+                {user.image && (
+                  <button
+                    onClick={handleImageReset}
+                    disabled={isUpdating}
+                    className={`flex h-8 w-full items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-left text-[13px] transition-colors ${isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"} ${isUpdating ? "cursor-not-allowed opacity-45" : ""}`}
+                  >
+                    <FiRotateCcw className={`h-3.5 w-3.5 shrink-0 ${isDark ? "" : "text-[#9CA3AF]"}`} />
+                    {isUpdating ? "Resetting..." : "Reset To Default"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
-      
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        
-        <div className={`rounded-2xl ${cardBg} border p-5`}>
+
+        {/* Shown on a client's page too, not just your own. Every control inside is already
+            disabled under readOnly, so a staff member reads the client's settings without being
+            able to change them — which is what the page was for. Hiding the whole card instead
+            left Settings with a single Profile box and looked broken. */}
+        <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
               <FiShield className="w-4 h-4 text-[#701CC0]" />
@@ -818,7 +1002,12 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Security</h3>
           </div>
 
-          <div className="space-y-4">
+          {settingsUnavailable ? (
+            <p className={`text-[13px] ${textSecondary}`}>
+              This client&rsquo;s settings could not be loaded.
+            </p>
+          ) : (
+          <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className={`text-[13px] font-medium ${textPrimary}`}>Email Notifications</p>
@@ -827,34 +1016,39 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               <Toggle
                 checked={settings.emailNotifications}
                 onChange={(v) => handleSettingsUpdate({ emailNotifications: v })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled={!settingsEditable || isUpdating || isLoadingSettings}
               />
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className={`text-[13px] font-medium ${textPrimary}`}>Two-Factor Authentication</p>
-                <p className={`text-[12px] ${textSecondary}`}>Extra security layer.</p>
+                <p className={`text-[12px] ${textSecondary}`}>Coming soon.</p>
               </div>
               <Toggle
                 checked={settings.twoFactorEnabled}
                 onChange={(v) => handleSettingsUpdate({ twoFactorEnabled: v })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled
               />
             </div>
-            <div className={`pt-4 border-t ${isDark ? "border-white/10" : "border-gray-100"}`}>
+            {/* A hairline is enough to separate an action from the toggles above it; the rule
+                plus a full row of padding read as a gap in the card. Sized like Add account. */}
+            {!readOnly && (
+            <div className={`mt-1 border-t pt-3 ${isDark ? "border-white/10" : "border-[#EEF1F7]"}`}>
               <button
+                type="button"
                 onClick={() => setShowPasswordModal(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#701CC0] px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
               >
-                <FiLock className="w-4 h-4" />
+                <FiLock className="h-3.5 w-3.5" />
                 Change Password
               </button>
             </div>
+            )}
           </div>
+          )}
         </div>
 
-        
-        <div className={`rounded-2xl ${cardBg} border p-5`}>
+        <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
               <FiSettings className="w-4 h-4 text-[#701CC0]" />
@@ -862,14 +1056,19 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Preferences</h3>
           </div>
 
+          {settingsUnavailable ? (
+            <p className={`text-[13px] ${textSecondary}`}>
+              This client&rsquo;s settings could not be loaded.
+            </p>
+          ) : (
           <div className="space-y-4">
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Theme</label>
               <span className="relative block"><select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
                 value={settings.theme}
                 onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled={!settingsEditable || isUpdating || isLoadingSettings}
               >
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
@@ -880,10 +1079,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Language</label>
               <span className="relative block"><select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
                 value={settings.language}
                 onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled={!settingsEditable || isUpdating || isLoadingSettings}
               >
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
@@ -899,11 +1098,127 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </span>
             </div>
           </div>
+          )}
         </div>
       </div>
 
       {userRole === "user" && (
         <>
+
+          {readOnly ? (
+            /* The client's own connections. The Social Connections card below reads the signed-in
+               user's status routes, which on this page is the staff member looking at it — their
+               accounts under someone else's name. This card is fed by /api/client/settings, which
+               is scoped to the client. */
+            /* Same SettingsCard chrome, heading and account rows as the Google Accounts card on
+               your own settings page, so the two read as one design rather than two. What differs
+               is only what a staff member may do: no "Add account", no Reconnect, no Remove —
+               those are OAuth grants only the account holder can make. */
+            <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+              {/* Three boxes rather than one, on the same band as Profile / Security /
+                  Preferences above. Mailboxes and the other platforms were sections inside the
+                  Google card, which read as though Google owned them — a LinkedIn grant is not a
+                  Google account, and a workspace mailbox belongs to the company, not to a person's
+                  Google login. */}
+              <SettingsCard
+                title="Google Accounts"
+                icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
+                description="One grant covers Gmail and Calendar both."
+                cardClass={`h-full rounded-2xl ${cardBg} border p-5`}
+                titleClass={textPrimary}
+                descriptionClass={textSecondary}
+              >
+                {isLoadingSettings ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Loading…</p>
+                ) : !clientConnections ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
+                ) : clientConnections.google.length === 0 ? (
+                  <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
+                ) : (
+                  <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
+                    {clientConnections.google.map((account) => (
+                      <div key={account.email} className="py-3 first:pt-0 last:pb-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                          <span className={`truncate text-[13px] font-medium ${textPrimary}`}>
+                            {account.email}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              account.needsReconnect
+                                ? "bg-[#FDF3E2] text-[#8A5A00]"
+                                : "bg-[#E7F7EE] text-[#11734B]"
+                            }`}
+                          >
+                            {account.needsReconnect ? "Needs reconnect" : "Connected"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </SettingsCard>
+
+              <SettingsCard
+                title="Workspace Mailboxes"
+                icon={<FiMail className="w-4 h-4 text-[#701CC0]" />}
+                description="Attached to the company, not to one person's login."
+                cardClass={`h-full rounded-2xl ${cardBg} border p-5`}
+                titleClass={textPrimary}
+                descriptionClass={textSecondary}
+              >
+                {isLoadingSettings ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Loading…</p>
+                ) : !clientConnections ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
+                ) : clientConnections.mailboxes.length === 0 ? (
+                  <p className={`text-[13px] ${textSecondary}`}>No mailbox attached.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {clientConnections.mailboxes.map((mailbox) => (
+                      <li key={mailbox.email} className={`truncate text-[13px] ${textPrimary}`}>
+                        {mailbox.email}
+                        {mailbox.label ? <span className={textSecondary}> · {mailbox.label}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SettingsCard>
+
+              <SettingsCard
+                title="Other Platforms"
+                icon={<FiRefreshCw className="w-4 h-4 text-[#701CC0]" />}
+                description="Advertising and social grants this client has made."
+                cardClass={`h-full rounded-2xl ${cardBg} border p-5`}
+                titleClass={textPrimary}
+                descriptionClass={textSecondary}
+              >
+                {isLoadingSettings ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Loading…</p>
+                ) : !clientConnections ? (
+                  <p className={`text-[13px] ${textSecondary}`}>Could not be loaded.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {([
+                      ["LinkedIn", clientConnections.linkedin],
+                      ["Facebook", clientConnections.facebook],
+                      ["Google Ads", clientConnections.googleads],
+                    ] as const).map(([label, connected]) => (
+                      <li key={label} className={`flex items-center justify-between gap-2 text-[13px] ${textPrimary}`}>
+                        <span>{label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#F3F1F8] text-[#5B5468]"
+                          }`}
+                        >
+                          {connected ? "Connected" : "Not connected"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SettingsCard>
+            </div>
+          ) : (
           <div className={`rounded-2xl ${cardBg} border p-5`}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
@@ -999,6 +1314,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               ))}
             </div>
           </div>
+          )}
 
         </>
       )}
@@ -1012,25 +1328,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         <SettingsCard
           title="Google Accounts"
           icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
-          description="Connected Gmail accounts, and which of their calendars count towards upcoming meetings."
+          description="Connected Google accounts, and which of their calendars count towards upcoming meetings."
           cardClass={`rounded-2xl ${cardBg} border p-5`}
           titleClass={textPrimary}
           descriptionClass={textSecondary}
           action={
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  loadGmailConnections();
-                  loadDetectedCalendars();
-                }}
-                disabled={gmailLoading || calendarSettingsLoading}
-                className={`h-8 rounded-lg border px-3 text-[12.5px] font-medium transition-colors disabled:opacity-50 ${
-                  isDark ? "border-white/15 text-white hover:bg-white/10" : "border-[#E4E0EC] text-[#374151] hover:bg-[#FAF9FD]"
-                }`}
-              >
-                {gmailLoading || calendarSettingsLoading ? "Refreshing…" : "Refresh"}
-              </button>
+              {/* No Refresh: the list loads on open and again after connecting or removing an
+                  account, which is every moment it could be out of date. */}
               <button
                 type="button"
                 onClick={() => window.open(`/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}`, "_self")}
@@ -1042,8 +1347,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
           }
         >
-          {gmailAccounts.length === 0 ? (
-            <p className={`text-[13px] ${textSecondary}`}>No Gmail accounts connected yet.</p>
+          {gmailLoading && gmailAccounts.length === 0 ? (
+            /* Said "none connected" while the request was still out, which read as an answer. */
+            <p className={`text-[13px] ${textSecondary}`}>Loading accounts…</p>
+          ) : gmailAccounts.length === 0 ? (
+            <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
           ) : (
             <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
               {gmailAccounts.map((account) => {
@@ -1072,8 +1380,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                               "_self"
                             )
                           }
-                          className={`h-8 rounded-lg px-3 text-[12.5px] font-medium transition-colors ${
-                            isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"
+                          /* Outlined and inline-flex: as bare text on a bare background it read as
+                             a label rather than a control, and without the flex centring its text
+                             sat on its own baseline instead of on the trash icon's centre line.
+                             Both are h-8 now and share one border treatment. */
+                          className={`inline-flex h-8 items-center rounded-lg border px-3 text-[12.5px] font-medium transition-colors ${
+                            isDark
+                              ? "border-white/25 text-white hover:border-white/40 hover:bg-white/10"
+                              : "border-[#D8D2E4] text-[#374151] hover:border-[#701CC0]/45 hover:bg-[#F5F3F9]"
                           }`}
                         >
                           Reconnect
@@ -1081,7 +1395,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                         <button
                           type="button"
                           onClick={() => openDeleteGmailModal(account.email)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-red-50 hover:text-red-600"
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                            isDark
+                              ? "border-white/25 text-white/70 hover:border-red-400/60 hover:bg-red-500/10 hover:text-red-300"
+                              : "border-[#D8D2E4] text-[#9CA3AF] hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+                          }`}
                           aria-label={`Remove Gmail account ${account.email}`}
                           title="Remove account"
                         >
@@ -1094,21 +1412,19 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                       <p className={`mt-1.5 text-[12px] ${textSecondary}`}>Loading calendars…</p>
                     ) : calendars.length === 0 ? null : (
                       <ul className="mt-2 space-y-1">
-                        {calendars.map((calendar) => {
+                        {[...calendars]
+                          .sort(
+                            (a, b) =>
+                              Number(b.enabled) - Number(a.enabled) ||
+                              a.summary.localeCompare(b.summary)
+                          )
+                          .map((calendar) => {
                           const toggleKey = `${account.email}::${calendar.id}`;
                           return (
                             <li key={toggleKey} className="flex items-center justify-between gap-3 py-0.5 pl-1">
                               <div className="flex min-w-0 items-center gap-2">
                                 <FiCalendar className={`w-3.5 h-3.5 shrink-0 ${textSecondary}`} />
                                 <span className={`truncate text-[12.5px] ${textPrimary}`}>{calendar.summary}</span>
-                                {calendar.primary && (
-                                  <span className="shrink-0 rounded-full bg-[#F2E9FE] px-1.5 py-0.5 text-[10px] font-medium text-[#5F17A5]">
-                                    Primary
-                                  </span>
-                                )}
-                                <span className={`hidden shrink-0 text-[11px] sm:inline ${textSecondary}`}>
-                                  {calendar.timeZone}
-                                </span>
                               </div>
                               <Toggle
                                 checked={calendar.enabled}
@@ -1117,7 +1433,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                               />
                             </li>
                           );
-                        })}
+                          })}
                       </ul>
                     )}
                   </div>
@@ -1130,21 +1446,27 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       {/* Sign out lives here, not on the nav rail: the rail is for navigation, and a destructive
           action sitting one row below it was easy to mis-click. */}
+      {!readOnly && (
       <div className={`rounded-2xl ${cardBg} border p-5`}>
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign Out</h3>
             <p className={`text-[13px] ${textSecondary} mt-0.5`}>Ends your session on this device.</p>
           </div>
+          {/* Solid red, and the same height and radius as every other button in the panel. The
+              outlined version was a white box with a hairline that read as disabled next to the
+              filled buttons it sits among, for the one action on the page that ends the session. */}
           <button
+            type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50"
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] bg-[#B42318] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#8f1c12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B42318]"
           >
-            <FiLogOut className="w-4 h-4" />
-            Log out
+            <FiLogOut className="h-4 w-4" />
+            Sign Out
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 
@@ -1157,8 +1479,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">
               Account Settings
             </h1>
-            <div className="pb-16">
-              {cardsContent}
+            <div className="pb-8">
+              {isLoadingSettings ? cardsSkeleton : cardsContent}
             </div>
           </div>
         </div>
@@ -1177,7 +1499,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <div className="max-w-2xl mx-auto">
-              {cardsContent}
+              {isLoadingSettings ? cardsSkeleton : cardsContent}
             </div>
           </div>
         </>
@@ -1229,100 +1551,120 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       )}
 
       
+      {isEditingName && (
+        <Modal
+          zIndexClass="z-50"
+          backdropClassName="bg-black/50 backdrop-blur-sm"
+          cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+          label="Edit Name"
+          onClose={() => setIsEditingName(false)}
+        >
+          <PanelModalHeader title="Edit Name" onClose={() => setIsEditingName(false)} />
+
+          <div>
+            <PanelFieldLabel required>Full Name</PanelFieldLabel>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={PANEL_FIELD}
+              placeholder="Bidoof Sanchez"
+              autoFocus
+            />
+          </div>
+
+          {updateMessage?.type === "error" && (
+            <p role="alert" className="mt-4 text-[13px] text-[#B42318]">{updateMessage.text}</p>
+          )}
+
+          <PanelModalFooter
+            onCancel={() => {
+              setName(user.name || "");
+              setIsEditingName(false);
+              setUpdateMessage(null);
+            }}
+            onConfirm={() => void handleNameUpdate()}
+            confirmLabel={isUpdating ? "Saving…" : "Save Name"}
+            confirmDisabled={isUpdating || name.trim() === ""}
+          />
+        </Modal>
+      )}
+
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={closePasswordModal}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
-              <div>
-                <h2 className="text-lg font-semibold text-[#111827]">Change Password</h2>
-                <p className="text-sm text-[#6B7280] mt-0.5">Update your account password</p>
-              </div>
-              <button 
-                onClick={closePasswordModal}
-                className="p-2 rounded-lg text-[#6B7280] hover:text-red-600 hover:bg-red-50 transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <Modal
+          zIndexClass="z-50"
+          backdropClassName="bg-black/50 backdrop-blur-sm"
+          cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+          label="Change Password"
+          onClose={closePasswordModal}
+        >
+          <PanelModalHeader title="Change Password" onClose={closePasswordModal} />
 
-            <div className="p-6 space-y-4">
-              {passwordFieldErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-                  {passwordFieldErrors.general}
-                </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <PanelFieldLabel required>Current Password</PanelFieldLabel>
+              <input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={passwordData.currentPassword}
+                onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
+                className={passwordFieldErrors.currentPassword ? PANEL_FIELD_INVALID : PANEL_FIELD}
+              />
+              {passwordFieldErrors.currentPassword && (
+                <p className="mt-1 text-[12px] text-[#B42318]">{passwordFieldErrors.currentPassword}</p>
               )}
-
-              <div>
-                <label htmlFor="current-password" className="block text-sm font-medium text-[#374151] mb-1.5">Current Password</label>
-                <input
-                  id="current-password"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
-                  className={`w-full rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    passwordFieldErrors.currentPassword ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter current password"
-                />
-                {passwordFieldErrors.currentPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.currentPassword}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="new-password" className="block text-sm font-medium text-[#374151] mb-1.5">New Password</label>
-                <input
-                  id="new-password"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
-                  className={`w-full rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    passwordFieldErrors.newPassword ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter new password"
-                />
-                {passwordFieldErrors.newPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.newPassword}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="confirm-password" className="block text-sm font-medium text-[#374151] mb-1.5">Confirm New Password</label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
-                  className={`w-full rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    passwordFieldErrors.confirmPassword ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Confirm new password"
-                />
-                {passwordFieldErrors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.confirmPassword}</p>
-                )}
-              </div>
             </div>
 
-            <div className="px-6 py-4 bg-[#F9FAFB] border-t border-[#E5E7EB] rounded-b-2xl flex justify-end gap-3">
-              <button
-                onClick={closePasswordModal}
-                disabled={isUpdating}
-                className="px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-[#374151] hover:bg-[#F3F4F6] text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordChange}
-                disabled={isUpdating}
-                className="px-4 py-2.5 bg-[#701CC0] text-white rounded-xl hover:bg-[#5f17a5] text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {isUpdating ? "Changing..." : "Change Password"}
-              </button>
+            <div>
+              <PanelFieldLabel required>New Password</PanelFieldLabel>
+              <input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={passwordData.newPassword}
+                onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
+                className={passwordFieldErrors.newPassword ? PANEL_FIELD_INVALID : PANEL_FIELD}
+              />
+              {passwordFieldErrors.newPassword && (
+                <p className="mt-1 text-[12px] text-[#B42318]">{passwordFieldErrors.newPassword}</p>
+              )}
+            </div>
+
+            <div>
+              <PanelFieldLabel required>Confirm New Password</PanelFieldLabel>
+              <input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={passwordData.confirmPassword}
+                onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
+                className={passwordFieldErrors.confirmPassword ? PANEL_FIELD_INVALID : PANEL_FIELD}
+              />
+              {passwordFieldErrors.confirmPassword && (
+                <p className="mt-1 text-[12px] text-[#B42318]">{passwordFieldErrors.confirmPassword}</p>
+              )}
             </div>
           </div>
-        </div>
+
+          {/* The catch branch files its message under `general`; naming it anything else here
+              would have swallowed every unexpected failure silently. */}
+          {passwordFieldErrors.general && (
+            <p role="alert" className="mt-4 text-[13px] text-[#B42318]">{passwordFieldErrors.general}</p>
+          )}
+
+          <PanelModalFooter
+            onCancel={closePasswordModal}
+            onConfirm={() => void handlePasswordChange()}
+            confirmLabel={isUpdating ? "Updating…" : "Update Password"}
+            confirmDisabled={
+              isUpdating ||
+              !passwordData.currentPassword ||
+              !passwordData.newPassword ||
+              !passwordData.confirmPassword
+            }
+          />
+        </Modal>
       )}
 
       {showDeleteGmailModal && (

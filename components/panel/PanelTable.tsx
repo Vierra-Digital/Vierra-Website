@@ -49,35 +49,6 @@ export const PanelHeader: React.FC<{ title: string; children?: React.ReactNode }
   </div>
 )
 
-/**
- * The bar that replaces nothing — it sits between the header and the table once at least one row
- * is selected, offering whatever bulk actions the page supports. Disappears the moment the
- * selection is empty, same as Gmail's.
- */
-export const PanelBulkBar: React.FC<{
-  count: number
-  label?: (count: number) => string
-  onClear: () => void
-  children: React.ReactNode
-}> = ({ count, label = (n) => `${n} selected`, onClear, children }) => {
-  if (count === 0) return null
-  return (
-    <div className="mb-3 flex items-center justify-between gap-3 rounded-[10px] bg-[#F2E9FE] px-4 py-2.5">
-      <div className="flex items-center gap-3">
-        <span className="text-[13px] font-medium text-[#5F17A5]">{label(count)}</span>
-        <button
-          type="button"
-          onClick={onClear}
-          className="text-[12.5px] font-medium text-[#701CC0] underline-offset-2 hover:underline"
-        >
-          Clear selection
-        </button>
-      </div>
-      <div className="flex items-center gap-2">{children}</div>
-    </div>
-  )
-}
-
 export const PanelSearch: React.FC<{
   id: string
   label: string
@@ -196,8 +167,37 @@ export const PanelSelect: React.FC<{
  * The table card. `overflow-hidden` is load-bearing: without it the white table spills over the
  * rounded corners and the radius only shows on the header strip.
  */
-export const PanelCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">{children}</div>
+/**
+ * The dashboard's stat tile, shared.
+ *
+ * The dashboard, the Marketing Tracker and Project Management all show a headline count above their
+ * detail, and each had drawn its own — a bordered white card, a figure on a purple gradient, a
+ * label-and-value row. One tile, so a number looks the same wherever it is read.
+ */
+export const PanelStat: React.FC<{
+  label: string
+  value: React.ReactNode
+  hint?: React.ReactNode
+}> = ({ label, value, hint }) => (
+  /* A column with the hint pushed to the bottom, because a row of these rarely all carry one —
+     Billing has a hint on three of four tiles, Analytics on one of four. The grid stretches every
+     tile to the tallest, so with the hint sitting straight after the value each one landed at a
+     different height and the row read as misaligned. mt-auto puts them all on one baseline; where
+     every tile has a hint (or none does) nothing moves. */
+  <div className="flex h-full flex-col rounded-xl bg-[#F1EFF6] px-4 py-4 transition-colors duration-150 hover:bg-[#EBE8F3]">
+    <h3 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
+    <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-[#111827]">{value}</div>
+    {hint ? <div className="mt-auto pt-2 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
+  </div>
+)
+
+export const PanelCard: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className = "",
+}) => (
+  <div className={`overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white ${className}`}>
+    {children}
+  </div>
 )
 
 export const PanelTable: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -222,19 +222,31 @@ export const PanelTd: React.FC<{ children: React.ReactNode; className?: string }
   <td className={`px-5 py-4 text-[13px] text-[#111827] first:pl-6 last:pr-6 ${className}`}>{children}</td>
 )
 
+/**
+ * Takes rows, not cells — symmetric with PanelTbody, and deliberately so.
+ *
+ * This used to wrap its children in a `<tr>` of its own while PanelTbody did not. Four of the five
+ * call sites wrote `<PanelThead><PanelTr>…` anyway, matching the tbody they had just written, and
+ * produced `<tr><tr><th>…`. A nested row is invalid, and the browser's table fixup then sized the
+ * header cells independently of the body: on the billing tables the header strip came out 631px
+ * wide against a 1344px body, so no heading sat above its column.
+ *
+ * Requiring the row explicitly removes the asymmetry that caused it. A missing PanelTr is now
+ * visible in the markup rather than silently producing a second one.
+ */
 export const PanelThead: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <thead className="border-b border-[#E4E0EC] bg-[#F7F5FB]">
-    <tr>{children}</tr>
-  </thead>
+  <thead className="border-b border-[#E4E0EC] bg-[#F7F5FB]">{children}</thead>
 )
 
+/* The row hover lives here rather than on PanelTr, so it applies to data rows only — a header row
+   is the same PanelTr and should not light up under the cursor. */
 export const PanelTbody: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <tbody className="divide-y divide-[#EFECF4] bg-white">{children}</tbody>
+  <tbody className="divide-y divide-[#EFECF4] bg-white [&>tr]:transition-colors [&>tr:hover]:bg-[#F9F7FD]">
+    {children}
+  </tbody>
 )
 
-export const PanelTr: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <tr className="transition-colors hover:bg-[#F9F7FD]">{children}</tr>
-)
+export const PanelTr: React.FC<{ children: React.ReactNode }> = ({ children }) => <tr>{children}</tr>
 
 /** A muted em-dash, so an empty cell reads as "nothing here" rather than as a rendering fault. */
 export const PanelEmptyCell: React.FC = () => <span className="text-[#B9B4C6]">—</span>
@@ -388,39 +400,6 @@ export type PanelColumn<T> = {
  *
  * Rows are sliced here too, so a page cannot paginate its display and count something else.
  */
-/**
- * Row-selection wiring for PanelDataTable. `isRowSelectable` lets a page exclude rows that can't
- * take the bulk action at all (e.g. "that's me" or "that's a pending invite, not a staff row") —
- * excluded rows get no checkbox and are ignored by "select all on this page".
- */
-export type PanelTableSelection = {
-  selectedKeys: Set<string>
-  onToggleRow: (key: string) => void
-  onTogglePage: (keys: string[], nextChecked: boolean) => void
-  isRowSelectable?: (key: string) => boolean
-}
-
-/** A checkbox tinted to match the panel's accent rather than the browser default. */
-const PanelCheckbox: React.FC<{
-  checked: boolean
-  indeterminate?: boolean
-  onChange: () => void
-  ariaLabel: string
-}> = ({ checked, indeterminate = false, onChange, ariaLabel }) => (
-  <input
-    type="checkbox"
-    checked={checked}
-    aria-label={ariaLabel}
-    onChange={onChange}
-    onClick={(e) => e.stopPropagation()}
-    ref={(el) => {
-      if (el) el.indeterminate = indeterminate
-    }}
-    style={{ accentColor: "#701CC0" }}
-    className="h-4 w-4 cursor-pointer rounded"
-  />
-)
-
 export function PanelDataTable<T>({
   rows,
   columns,
@@ -435,7 +414,6 @@ export function PanelDataTable<T>({
   emptyImage,
   emptyImageGapClassName,
   emptyAction,
-  selection,
 }: {
   rows: T[]
   columns: Array<PanelColumn<T>>
@@ -450,8 +428,6 @@ export function PanelDataTable<T>({
   emptyImage?: React.ReactNode
   emptyImageGapClassName?: string
   emptyAction?: React.ReactNode
-  /** Adds a checkbox column when present. Omit entirely for a page with no bulk actions. */
-  selection?: PanelTableSelection
 }) {
   if (loading) {
     return <div className="flex items-center justify-center py-12">{loadingLabel}</div>
@@ -475,64 +451,31 @@ export function PanelDataTable<T>({
   const safePage = Math.min(page, totalPages - 1)
   const visible = rows.slice(safePage * pageSize, (safePage + 1) * pageSize)
 
-  const selectablePageKeys = selection
-    ? visible.map(getRowKey).filter((key) => selection.isRowSelectable?.(key) ?? true)
-    : []
-  const allPageSelected = selection
-    ? selectablePageKeys.length > 0 && selectablePageKeys.every((key) => selection.selectedKeys.has(key))
-    : false
-  const somePageSelected = selection ? selectablePageKeys.some((key) => selection.selectedKeys.has(key)) : false
-
   return (
     <PanelCard>
       <PanelTable>
         <PanelThead>
-          {selection && (
-            <PanelTh className="w-10">
-              {selectablePageKeys.length > 0 ? (
-                <PanelCheckbox
-                  checked={allPageSelected}
-                  indeterminate={!allPageSelected && somePageSelected}
-                  onChange={() => selection.onTogglePage(selectablePageKeys, !allPageSelected)}
-                  ariaLabel="Select all rows on this page"
-                />
-              ) : null}
-            </PanelTh>
-          )}
-          {columns.map((column) => (
-            <PanelTh key={column.key} className={column.align === "right" ? "!text-right" : ""}>
-              {column.header}
-            </PanelTh>
-          ))}
+          <PanelTr>
+            {columns.map((column) => (
+              <PanelTh key={column.key} className={column.align === "right" ? "!text-right" : ""}>
+                {column.header}
+              </PanelTh>
+            ))}
+          </PanelTr>
         </PanelThead>
         <PanelTbody>
-          {visible.map((row) => {
-            const key = getRowKey(row)
-            const selectable = selection ? (selection.isRowSelectable?.(key) ?? true) : false
-            return (
-              <PanelTr key={key}>
-                {selection && (
-                  <PanelTd className="w-10">
-                    {selectable ? (
-                      <PanelCheckbox
-                        checked={selection.selectedKeys.has(key)}
-                        onChange={() => selection.onToggleRow(key)}
-                        ariaLabel="Select row"
-                      />
-                    ) : null}
-                  </PanelTd>
-                )}
-                {columns.map((column) => (
-                  <PanelTd
-                    key={column.key}
-                    className={`${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}
-                  >
-                    {column.cell(row)}
-                  </PanelTd>
-                ))}
-              </PanelTr>
-            )
-          })}
+          {visible.map((row) => (
+            <PanelTr key={getRowKey(row)}>
+              {columns.map((column) => (
+                <PanelTd
+                  key={column.key}
+                  className={`${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}
+                >
+                  {column.cell(row)}
+                </PanelTd>
+              ))}
+            </PanelTr>
+          ))}
         </PanelTbody>
       </PanelTable>
       {/* Nothing to page to, nothing to show. */}

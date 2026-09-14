@@ -21,28 +21,31 @@ import {
   FiUsers,
   FiFile,
   FiUserCheck,
+  FiBarChart2,
+  FiSend,
+  FiCreditCard,
+  FiDollarSign,
+  FiSettings,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 import { useActiveClient } from "@/lib/activeClient"
 import { PANEL_SECTIONS, resolvePanelSection } from "@/lib/panel/navigation"
-import { confirmDiscardDrafts } from "@/lib/panel/drafts"
-import { usePageLeaveGuard } from "@/hooks/useDraftGuard"
 
 /**
  * The sections this file actually mounts. PANEL_SECTIONS is wider — it still carries ltv, blog and
  * artemis, which this branch removed from the panel — so a URL naming one of those has to be caught
  * here instead of switching to a section with nothing behind it.
  */
-const RENDERED_SECTIONS = new Set([0, 1, 2, 5, 6, 8, 9, 10])
+const RENDERED_SECTIONS = new Set([0, 1, 2, 5, 6, 8, 9, 10, 12])
 
 /**
  * Sections whose markup is gated on !isStaff. resolvePanelSection already withholds 8 and 9 from
  * staff, but not 1 — it has no reason to, since Clients is staff-visible on master. Here it is not,
  * so a staff member following ?section=clients would land on a section that renders nothing.
  */
-const ADMIN_ONLY_SECTIONS = new Set([1, 8, 9])
+const ADMIN_ONLY_SECTIONS = new Set([1, 8, 9, 12])
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
   { ssr: false }
@@ -74,6 +77,18 @@ const ProjectManagement = dynamic(
 )
 const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
+  { ssr: false }
+)
+const FinancesSection = dynamic(
+  () => import("@/components/PanelPages/FinancesSection"),
+  { ssr: false }
+)
+const ClientBillingSection = dynamic(
+  () => import("@/components/PanelPages/ClientBillingSection"),
+  { ssr: false }
+)
+const ClientOverviewSection = dynamic(
+  () => import("@/components/PanelPages/ClientOverviewSection"),
   { ssr: false }
 )
 const FilesSection = dynamic(
@@ -142,10 +157,10 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [currentUserName, setCurrentUserName] = useState<string | null>(initialUserName)
   const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
   const [isClientViewMode, setIsClientViewMode] = useState(false)
-  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
-  const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
+  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6 | 7>(0)
+  const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string; companyId: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
-  const { setActiveClient } = useActiveClient()
+  const { activeClient, setActiveClient } = useActiveClient()
 
   /**
    * The section lives in the URL, so Back/Forward and bookmarks work and a link can point at a
@@ -170,22 +185,18 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     )
   }, [router.isReady, router.query.section, resolvedUserRole])
 
-  usePageLeaveGuard()
 
   const navigateSection = (section: number) => {
-    void (async () => {
-      if (!(await confirmDiscardDrafts())) return
-      if (section === 10) setFilesVisitCount((count) => count + 1)
-      setShowSettings(false)
-      setIsSidebarOpen(false)
-      await router
-        .push(
-          { pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section] } },
-          undefined,
-          { shallow: true, scroll: false }
-        )
-        .catch(() => {})
-    })()
+    if (section === 10) setFilesVisitCount((count) => count + 1)
+    setShowSettings(false)
+    setIsSidebarOpen(false)
+    void router
+      .push(
+        { pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section] } },
+        undefined,
+        { shallow: true, scroll: false }
+      )
+      .catch(() => {})
   }
 
   const isAdmin = resolvedUserRole === "admin"
@@ -197,11 +208,15 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   // declaration, and the compiler flagged it as one.
   async function fetchCurrentUser() {
     try {
-      const response = await fetch("/api/profile/getUser")
+      // no-store: after saving a picture the browser answered this from cache, so the version
+      // came back unchanged and the sidebar kept showing the old one.
+      const response = await fetch("/api/profile/getUser", { cache: "no-store" })
       if (response.ok) {
         const userData = await response.json()
         setCurrentUserName(userData.name)
-        if (userData.imageVersion) setImageVersion(userData.imageVersion)
+        // Not `if (userData.imageVersion)`: resetting to the default returns no version, and
+        // skipping the update there left the removed picture on screen until a reload.
+        setImageVersion(userData.imageVersion ?? 0)
       }
     } catch (error) {
       console.error("Failed to fetch current user:", error)
@@ -311,17 +326,13 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
    * Scoped to "client": a draft belonging to the client workspace should be settled before moving
    * within it, while a draft elsewhere in the panel is not this navigation's business.
    */
-  const navigateViewModeSection = (section: 0 | 1 | 2 | 3) => {
-    void (async () => {
-      if (!(await confirmDiscardDrafts("client"))) return
-      setViewModeSection(section)
-      setShowSettings(false)
-      setIsSidebarOpen(false)
-    })()
+  const navigateViewModeSection = (section: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7) => {
+    setViewModeSection(section)
+    setShowSettings(false)
+    setIsSidebarOpen(false)
   }
 
-  const enterClientViewMode = async (client: { id: string; name: string; email: string }) => {
-    if (!(await confirmDiscardDrafts())) return
+  const enterClientViewMode = async (client: { id: string; name: string; email: string; companyId: string }) => {
     // Where to put the reader back when they return: the row they opened, and the scroll offset
     // the list was at. Without both, leaving a workspace dropped them at the top of an unfamiliar
     // list with focus on the body.
@@ -348,7 +359,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   }
 
   const exitClientViewMode = async () => {
-    if (!(await confirmDiscardDrafts("client"))) return
     restoreClientList()
     setIsClientViewMode(false)
     setViewClient(null)
@@ -368,12 +378,18 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
         <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#6B1BC4] border-r border-white/[0.09] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[224px]" : "w-0"} md:w-[224px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full shrink-0 flex items-center justify-center px-4 pt-7 pb-6">
             <Link href="/">
+              {/* priority, because this is the one image on the panel that is above the fold on
+                  every route. Without it next/image marks the tag loading="lazy" and emits no
+                  preload, so the browser only discovers it after hydration — the sidebar, its nav
+                  and the section all painted while the logo was still a gap, and it popped in
+                  last. Eager + a preload link puts it in the same paint as the rest. */}
               <Image
                 src="/assets/vierra-logo-panel.png"
                 alt="Vierra Go Home"
                 width={152}
                 height={56}
                 className="w-[108px] h-auto"
+                priority
               />
             </Link>
           </div>
@@ -404,6 +420,23 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                     Files
                   </span>
                 </button>
+                {([
+                  [4, "Analytics", <FiBarChart2 key="a" className="w-4 h-4 shrink-0" />],
+                  [5, "Campaign History", <FiSend key="c" className="w-4 h-4 shrink-0" />],
+                  [6, "Billing", <FiCreditCard key="b" className="w-4 h-4 shrink-0" />],
+                  [7, "Settings", <FiSettings key="s" className="w-4 h-4 shrink-0" />],
+                ] as const).map(([section, label, icon]) => (
+                  <button
+                    key={section}
+                    type="button"
+                    aria-current={viewModeSection === section && !showSettings ? "page" : undefined}
+                    onClick={() => navigateViewModeSection(section)}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === section ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  >
+                    {icon}
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>{label}</span>
+                  </button>
+                ))}
               </>
             ) : (
               <>
@@ -444,10 +477,25 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 <button type="button" aria-current={currentSection === 6 && !showSettings ? "page" : undefined} onClick={() => navigateSection(6)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    Project Tasks
+                    Project Management
                   </span>
                 </button>
                 
+                {/* Admins only. Staff run campaigns for clients; company-wide takings are not
+                    part of that job, and /api/finances/overview refuses them as well. */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    aria-current={currentSection === 12 && !showSettings ? "page" : undefined}
+                    onClick={() => navigateSection(12)}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 12 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  >
+                    <FiDollarSign className="w-4 h-4 shrink-0" />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
+                      Finances
+                    </span>
+                  </button>
+                )}
                 {!isStaff && (
                   <button
                     type="button"
@@ -563,13 +611,12 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 }}
                 userRole={resolvedUserRole}
                 onNameUpdate={setCurrentUserName}
-                onImageUpdate={async () => {
-                  const r = await fetch("/api/profile/getUser")
-                  if (r.ok) {
-                    const d = await r.json()
-                    if (d.imageVersion) setImageVersion(d.imageVersion)
-                  }
-                }}
+                /* Both go through fetchCurrentUser, which sets the very state the sidebar renders
+                   from. Re-running getServerSideProps would not do it: currentUserName and
+                   imageVersion are seeded from props by useState once, so fresh props after a
+                   navigation are never read again. */
+                onImageUpdate={() => void fetchCurrentUser()}
+                onSettingsUpdate={() => void fetchCurrentUser()}
                 onClose={() => setShowSettings(false)}
                 variant="panel"
               />
@@ -583,6 +630,30 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               {isClientViewMode ? (
                     <>
                       {viewModeSection === 0 && <DashboardSection />}
+                      {viewModeSection === 4 && (
+                        <ClientOverviewSection view="analytics" companyId={viewClient?.companyId ?? null} />
+                      )}
+                      {viewModeSection === 5 && (
+                        <ClientOverviewSection view="campaigns" companyId={viewClient?.companyId ?? null} />
+                      )}
+                      {viewModeSection === 6 && (
+                        <ClientBillingSection companyId={viewClient?.companyId ?? null} />
+                      )}
+                      {/* The client's own settings page. canManageClient lets a staff member
+                          change the client's settings — theme, language, notifications, two-factor
+                          — which is what the client view is for. readOnly still holds identity
+                          shut: nobody renames a client, replaces their picture or sets their
+                          password from here. */}
+                      {viewModeSection === 7 && (
+                        <UserSettingsPage
+                          readOnly
+                          canManageClient
+                          variant="panel"
+                          userRole="user"
+                          billingCompanyId={viewClient?.companyId ?? null}
+                          user={{ name: viewClient?.name ?? null, email: viewClient?.email ?? null, image: null }}
+                        />
+                      )}
                       {viewModeSection === 1 && (
                         <FilesSection readOnly allowDelete showOwnerInReadOnly fileFilter={viewClient?.id} />
                       )}
@@ -610,8 +681,13 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                             onAddClient={() => setIsAddClientOpen(true)}
                             refreshTrigger={clientRefreshTrigger}
                             onViewClient={(client) => void enterClientViewMode(client)}
+                            activeCompanyId={activeClient?.id ?? null}
                             onSetActiveClient={(client) =>
-                              setActiveClient({ id: client.companyId, name: client.businessName })
+                              // null clears it, which puts the dashboard and the trackers back to
+                              // the company-wide view.
+                              setActiveClient(
+                                client ? { id: client.companyId, name: client.businessName } : null
+                              )
                             }
                           />
                         </div>
@@ -644,6 +720,14 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {visitedSections.has(10) && (
                         <div key={`section-10-${sectionEpoch[10] || 0}`} style={{ display: currentSection === 10 ? undefined : "none" }}>
                           <FilesSection refreshTrigger={filesVisitCount} />
+                        </div>
+                      )}
+                      {/* Admin only, matching the nav entry and /api/finances/overview. Gated on
+                          isAdmin as well as the visited set, so a staff member who reached
+                          ?section=finances still mounts nothing. */}
+                      {isAdmin && visitedSections.has(12) && (
+                        <div key={`section-12-${sectionEpoch[12] || 0}`} style={{ display: currentSection === 12 ? undefined : "none" }}>
+                          <FinancesSection />
                         </div>
                       )}
                     </>

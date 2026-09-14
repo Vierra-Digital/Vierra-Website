@@ -6,11 +6,16 @@ import { inter } from "@/lib/fonts";
 import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+// The house form styling, shared with the client dialog so the two cannot drift apart.
+import {
+    PANEL_FIELD as FIELD,
+    PANEL_FIELD_INVALID as FIELD_INVALID,
+    PanelFieldSelect as FieldSelect,
+} from "@/components/ui/PanelForm";
 import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
 import {
     PanelBadge,
-    PanelBulkBar,
     PanelButton,
     PanelClearFilters,
     PanelDataTable,
@@ -72,6 +77,8 @@ interface TeamRow {
     country: string
     company_email: string | null
     mentor: string | null
+    /** Resolved for display; `mentor` stays the id the edit dialog preselects with. */
+    mentorName: string | null
     time_zone: string | null
     /**
      * The count, not the "2/3" label. It was typed as a string while the API sends the integer
@@ -128,10 +135,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-    const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
-    const [bulkDeleting, setBulkDeleting] = useState(false)
-    const [bulkDeleteError, setBulkDeleteError] = useState("")
+    const [rescindError, setRescindError] = useState("")
+    const [updateError, setUpdateError] = useState("")
+    const [rescinding, setRescinding] = useState(false)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -204,8 +210,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     }
 
     const confirmRescindInvite = async () => {
-        if (!inviteToRescind) return
-
+        if (!inviteToRescind || rescinding) return
+        setRescinding(true)
+        setRescindError("")
         try {
             const response = await fetch(`/api/admin/invitations/${inviteToRescind.id}`, {
                 method: "DELETE",
@@ -215,84 +222,16 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 throw new Error("Failed to rescind invite")
             }
             setRows(prev => prev.filter(r => r.id !== inviteToRescind.id))
+            // Closed only on success — a failure leaves the dialog up so the reason in it can be
+            // read, which a finally block closing unconditionally would not allow.
             setShowRescindModal(false)
             setInviteToRescind(null)
         } catch (error) {
             console.error("Error rescinding invite:", error)
-            alert("Failed to rescind invite. Please try again.")
+            setRescindError(`Could not rescind the invite for ${inviteToRescind.email}. Try again.`)
+        } finally {
+            setRescinding(false)
         }
-    }
-
-    const toggleRowSelection = (id: string) => {
-        setSelectedIds(prev => {
-            const next = new Set(prev)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            return next
-        })
-    }
-
-    const togglePageSelection = (keys: string[], nextChecked: boolean) => {
-        setSelectedIds(prev => {
-            const next = new Set(prev)
-            for (const key of keys) {
-                if (nextChecked) next.add(key)
-                else next.delete(key)
-            }
-            return next
-        })
-    }
-
-    const clearSelection = () => setSelectedIds(new Set())
-
-    /**
-     * A row can't be bulk-removed if it's the signed-in admin's own account — the API refuses
-     * that anyway, but surfacing it as "not even checkable" is clearer than a per-row failure
-     * buried in the bulk error summary.
-     */
-    const isRowSelectable = (id: string) => {
-        const row = rows.find(r => r.id === id)
-        return Boolean(row) && !row?.isSelf
-    }
-
-    const handleBulkRemove = async () => {
-        if (activeSelectedIds.size === 0 || bulkDeleting) return
-        setBulkDeleting(true)
-        setBulkDeleteError("")
-        const targets = rows.filter(r => activeSelectedIds.has(r.id))
-        // Sequential: staff removal and invite rescission both hit admin routes (staff removal
-        // also calls out to Supabase Auth), and a bulk removal here is rare enough that one at a
-        // time is safer than a burst of concurrent admin calls.
-        const failedIds = new Set<string>()
-        const failedLabels: string[] = []
-        for (const target of targets) {
-            try {
-                const response = target.isPending
-                    ? await fetch(`/api/admin/invitations/${target.id}`, { method: "DELETE" })
-                    : await fetch(`/api/admin/users`, {
-                          method: "DELETE",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ id: target.id }),
-                      })
-                if (!response.ok) throw new Error("failed")
-            } catch {
-                failedIds.add(target.id)
-                failedLabels.push(target.name || target.email)
-            }
-        }
-        const removedIds = new Set(targets.filter(t => !failedIds.has(t.id)).map(t => t.id))
-        setRows(prev => prev.filter(r => !removedIds.has(r.id)))
-        setSelectedIds(new Set())
-        if (failedIds.size > 0) {
-            setBulkDeleteError(
-                failedIds.size === targets.length
-                    ? "Could not remove any of the selected rows. Close this dialog and try again."
-                    : `Removed ${targets.length - failedIds.size} of ${targets.length}. Failed: ${failedLabels.join(", ")}.`
-            )
-        } else {
-            setBulkDeleteModalOpen(false)
-        }
-        setBulkDeleting(false)
     }
 
     const handleUpdateStaff = async (updatedData: Partial<TeamRow>) => {
@@ -311,14 +250,21 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             if (!response.ok) {
                 throw new Error("Failed to update staff member")
             }
-            setRows(prev => prev.map(r => 
-                r.id === selectedStaff.id ? { ...r, ...updatedData } : r
-            ))
+            /**
+             * Reloaded rather than merged into the row we already have.
+             *
+             * The merge wrote back exactly the fields that were sent, and Mentor is not one of
+             * them: the dialog sends mentor_id, while the column renders the name the API resolves
+             * from it. Saving a mentor therefore changed nothing on screen until the next refetch,
+             * which read as the field not working at all. Reloading also means what the table
+             * shows is what was actually stored, rather than what we hoped would be.
+             */
+            await loadTeamData()
             setShowManageModal(false)
             setSelectedStaff(null)
         } catch (error) {
             console.error("Error updating staff:", error)
-            alert("Failed to update staff member. Please try again.")
+            setUpdateError("Could not save those changes. Try again.")
         }
     }
 
@@ -334,63 +280,47 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             const res = await fetch("/api/admin/users")
             if (!res.ok) throw new Error("Failed to fetch team data")
             const data = await res.json()
+            /**
+             * One request, one row per person. /api/admin/users already returns unaccepted
+             * invitations alongside the memberships, tagged with pendingInvite and reported as
+             * staff — so filtering on role alone let every invite through as though it were a
+             * colleague, and the separate /api/admin/invitations call then added the same person
+             * a second time. An invited teammate appeared twice, once looking established.
+             */
             const teamOnly = (data as any[]).filter((u: any) => u.role === "admin" || u.role === "staff")
-            const shaped: TeamRow[] = teamOnly.map((u: any) => ({
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                image: u.image,
-                imageVersion: u.imageVersion,
-                position: u.position,
-                country: u.country,
-                company_email: u.company_email,
-                mentor: u.mentor,
-                strikes: typeof u.strikes === "number" ? u.strikes : 0,
-                time_zone: u.time_zone,
-                status: u.status,
-                lastActiveAt: u.lastActiveAt,
-                isPending: false,
-                isSelf: u.isSelf,
-            }))
-
-            let pendingRows: TeamRow[] = []
-            if (userRole === "admin") {
-                try {
-                    const invRes = await fetch("/api/admin/invitations")
-                    if (invRes.ok) {
-                        const invitations = await invRes.json()
-                        pendingRows = (invitations as any[]).map((inv: any) => ({
-                            id: inv.id,
-                            // The invite carries what the inviter filled in, so a pending row reads
-                            // like the rest of the table rather than repeating the email twice and
-                            // showing a dash where real answers exist. The Pending badge is what
-                            // marks it, not a placeholder in every column.
-                            name: [inv.first_name, inv.last_name].filter(Boolean).join(" ") || inv.email,
-                            email: inv.email,
-                            image: null,
-                            position: inv.position || "Invited",
-                            country: "—",
-                            company_email: null,
-                            mentor: null,
-                            time_zone: inv.time_zone || null,
-                            strikes: null,
-                            status: "pending",
-                            lastActiveAt: null,
-                            isPending: true,
-                        }))
-                    }
-                } catch (e) {
-                    console.warn("Failed to load pending invitations:", e)
+            const shaped: TeamRow[] = teamOnly.map((u: any) => {
+                const pending = Boolean(u.pendingInvite)
+                return {
+                    // The invite's own id, so rescinding has something to address.
+                    id: pending ? u.pendingInvite.id : u.id,
+                    name: u.name || u.email,
+                    email: u.email,
+                    image: u.image,
+                    imageVersion: u.imageVersion,
+                    position: u.position,
+                    country: u.country,
+                    company_email: u.company_email,
+                    mentor: u.mentor,
+                    mentorName: u.mentorName ?? null,
+                    // The invite carries the strike count the inviter set, so a pending row shows
+                    // it rather than a dash — blanking it was hiding an answer that had been given.
+                    strikes: typeof u.strikes === "number" ? u.strikes : pending ? null : 0,
+                    time_zone: u.time_zone,
+                    status: pending ? "pending" : u.status,
+                    lastActiveAt: pending ? null : u.lastActiveAt,
+                    isPending: pending,
+                    isSelf: u.isSelf,
                 }
-            }
+            })
 
-            setRows([...pendingRows, ...shaped])
+            // Invites first, so a new one is visible without hunting for it.
+            setRows([...shaped.filter((r) => r.isPending), ...shaped.filter((r) => !r.isPending)])
         } catch (error) {
             console.error("Error loading team data:", error)
         } finally {
         setLoading(false)
         }
-    }, [userRole])
+    }, [])
 
     /**
      * The rows the table shows. Derived, not stored.
@@ -465,17 +395,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     useEffect(() => {
         // Loading the team on mount; the loader flips its own loading state after awaiting.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTeamData()
     }, [loadTeamData])
-
-    // Derived, not synced via an effect: a refetch or a single-row delete can drop ids that are
-    // still in selectedIds, and re-deriving here (rather than pruning selectedIds itself in an
-    // effect) keeps the bulk bar's count from ever including a row that's already gone.
-    const activeSelectedIds = new Set<string>()
-    for (const row of rows) {
-        if (selectedIds.has(row.id)) activeSelectedIds.add(row.id)
-    }
 
     const positionTone = (position: string) => {
         switch (position) {
@@ -581,17 +502,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 )}
             </PanelHeader>
 
-            {userRole === "admin" && (
-                <PanelBulkBar count={activeSelectedIds.size} onClear={clearSelection} label={(n) => `${n} selected`}>
-                    <PanelButton
-                        onClick={() => { setBulkDeleteError(""); setBulkDeleteModalOpen(true) }}
-                        icon={<FiTrash2 className="h-4 w-4" />}
-                    >
-                        Remove
-                    </PanelButton>
-                </PanelBulkBar>
-            )}
-
             <PanelDataTable<TeamRow>
                 rows={filteredRows}
                 getRowKey={(r) => r.id}
@@ -603,16 +513,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 emptyTitle="No Staff Found"
                 emptyMessage="No staff match your search."
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
-                selection={
-                    userRole === "admin"
-                        ? {
-                              selectedKeys: activeSelectedIds,
-                              onToggleRow: toggleRowSelection,
-                              onTogglePage: togglePageSelection,
-                              isRowSelectable,
-                          }
-                        : undefined
-                }
                 columns={[
                     {
                         key: "name",
@@ -647,7 +547,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         header: "Time Zone",
                         cell: (r) => (r.time_zone ? timeZoneLabel(r.time_zone) : <PanelEmptyCell />),
                     },
-                    { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
+                    { key: "mentor", header: "Mentor", cell: (r) => r.mentorName || <PanelEmptyCell /> },
                     {
                         key: "strikes",
                         header: "Strikes",
@@ -698,6 +598,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
             {showManageModal && selectedStaff && userRole === "admin" && (
                 <ManageStaffModal
+                    saveError={updateError}
                     staff={selectedStaff}
                     mentorOptions={rows
                         .filter((r) => !r.isPending)
@@ -745,73 +646,31 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     title="Rescind Invite"
                     message={
                         <>
-                            Are you sure you want to rescind the invite for{" "}
-                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? They
-                            will no longer be able to use this invite to join the team.
-                        </>
-                    }
-                    confirmLabel="Rescind Invite"
-                    danger={false}
-                    onCancel={() => {
-                        setShowRescindModal(false)
-                        setInviteToRescind(null)
-                    }}
-                    onConfirm={confirmRescindInvite}
-                />
-            )}
-
-            {userRole === "admin" && (
-                <ConfirmActionModal
-                    isOpen={bulkDeleteModalOpen}
-                    title="Remove Selected"
-                    message={
-                        <>
-                            Are you sure you want to remove{" "}
-                            <span className="font-semibold text-[#111827]">
-                                {activeSelectedIds.size} row{activeSelectedIds.size === 1 ? "" : "s"}
-                            </span>
-                            ? Staff removal is permanent and cannot be undone; pending invites are rescinded.
-                            {bulkDeleteError && (
+                            Rescind the invite for{" "}
+                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? The
+                            link they were sent will stop working and they will not be able to join.
+                            {rescindError && (
                                 <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
-                                    {bulkDeleteError}
+                                    {rescindError}
                                 </span>
                             )}
                         </>
                     }
-                    confirmLabel="Remove Selected"
-                    busy={bulkDeleting}
-                    busyLabel="Removing…"
+                    confirmLabel="Rescind Invite"
+                    busy={rescinding}
+                    busyLabel="Rescinding…"
+                    danger={false}
                     onCancel={() => {
-                        if (bulkDeleting) return
-                        setBulkDeleteModalOpen(false)
-                        setBulkDeleteError("")
+                        setShowRescindModal(false)
+                        setInviteToRescind(null)
+                        setRescindError("")
                     }}
-                    onConfirm={handleBulkRemove}
+                    onConfirm={confirmRescindInvite}
                 />
             )}
         </PanelPage>
     )
 }
-const FIELD_BASE =
-    "h-9 w-full rounded-[10px] px-3 text-[13px] text-[#111827] ring-1 ring-inset transition-shadow focus:outline-none"
-const FIELD = `${FIELD_BASE} bg-[#F4F2F8] ring-transparent focus:bg-white focus:ring-[#701CC0]/35`
-/** Same field, flagged. Built from the same base rather than rewritten, which is how the colour
- *  went missing the first time. */
-const FIELD_INVALID = `${FIELD_BASE} bg-red-50 ring-red-300 focus:ring-red-400`
-
-/** Select in the panel's field styling, with our chevron rather than the platform's. */
-const FieldSelect: React.FC<{
-    value: string
-    onChange: (value: string) => void
-    children: React.ReactNode
-}> = ({ value, onChange, children }) => (
-    <span className="relative block">
-        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${FIELD} appearance-none pr-9`}>
-            {children}
-        </select>
-        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden />
-    </span>
-)
 
 const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
 
@@ -935,13 +794,51 @@ const InviteTeammateModal: React.FC<{
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
+    /**
+     * null while nothing has been asked yet or an answer is in flight. Send Invite stays disabled
+     * until the address comes back free, so a taken one simply never enables the button — saying
+     * "that person already has an account" out loud would confirm who works here to anyone who can
+     * open this dialog.
+     */
+    const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null)
 
-    // Everything but the mentor has to be answered. Strikes always holds a value, so it is the
-    // name, email, position and time zone that decide whether the invite can go.
+    useEffect(() => {
+        // Clearing the previous answer is the point of the effect: an address being retyped must
+        // not keep Send Invite enabled on the strength of the last one that checked out.
+        /* eslint-disable react-hooks/set-state-in-effect */
+        if (!isValidEmail(email)) {
+            setEmailAvailable(null)
+            return
+        }
+        // Debounced: this fires per keystroke otherwise, and the answer only matters once typing
+        // has settled. `cancelled` stops a slow reply for an older address landing on a newer one.
+        let cancelled = false
+        setEmailAvailable(null)
+        /* eslint-enable react-hooks/set-state-in-effect */
+        const timer = window.setTimeout(() => {
+            void fetch(`/api/admin/invitations/available?email=${encodeURIComponent(email)}`)
+                .then((response) => (response.ok ? response.json() : { available: false }))
+                .then((body) => {
+                    if (!cancelled) setEmailAvailable(Boolean(body?.available))
+                })
+                .catch(() => {
+                    if (!cancelled) setEmailAvailable(false)
+                })
+        }, 350)
+        return () => {
+            cancelled = true
+            window.clearTimeout(timer)
+        }
+    }, [email])
+
+    // Everything but the mentor has to be answered, and the address has to be free. Strikes
+    // always holds a value, so it is the name, email, position and time zone that decide whether
+    // the invite can go.
     const canSubmit =
         firstName.trim() !== "" &&
         lastName.trim() !== "" &&
         isValidEmail(email) &&
+        emailAvailable === true &&
         position !== "" &&
         timeZone !== ""
 
@@ -1104,7 +1001,7 @@ const InviteTeammateModal: React.FC<{
                             ))}
                         </FieldSelect>
                     </div>
-                    <div className="sm:col-span-2">
+                    <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Time Zone <span className="text-[#B42318]">*</span>
                         </label>
@@ -1150,10 +1047,11 @@ const InviteTeammateModal: React.FC<{
  */
 const ManageStaffModal: React.FC<{
     staff: TeamRow
+    saveError?: string
     mentorOptions: Array<{ id: string; name: string; email: string }>
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
-}> = ({ staff, mentorOptions, onClose, onUpdate }) => {
+}> = ({ staff, saveError = "", mentorOptions, onClose, onUpdate }) => {
     const [firstName, setFirstName] = useState(() => splitName(staff.name || "").first)
     const [lastName, setLastName] = useState(() => splitName(staff.name || "").last)
     const [email, setEmail] = useState(staff.email || "")
@@ -1287,6 +1185,8 @@ const ManageStaffModal: React.FC<{
                     </FieldSelect>
                 </div>
             </div>
+
+            {saveError && <p className="mt-4 text-[13px] text-[#B42318]">{saveError}</p>}
 
             <div className="mt-6 flex justify-end gap-2">
                 <button

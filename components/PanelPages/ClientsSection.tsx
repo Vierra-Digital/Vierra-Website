@@ -4,7 +4,6 @@ import ProfileImage from "../ProfileImage"
 import { FiPlus, FiFilter, FiChevronDown, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import {
-    PanelBulkBar,
     PanelButton,
     PanelClearFilters,
     PanelDataTable,
@@ -70,14 +69,22 @@ const ClientActionsMenu: React.FC<{
     onView: () => void
     triggerId?: string
     onSetActive: () => void
+    onClearActive: () => void
+    isWorkingOn: boolean
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onDelete, onToggleStatus, triggerId }) => {
+}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onClearActive, isWorkingOn, onDelete, onToggleStatus, triggerId }) => {
     return (
         <RowActionMenu label={`Manage ${clientName}`} triggerId={triggerId}>
-          <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />}>
-            Work On This Client
-          </RowActionMenuItem>
+          {isWorkingOn ? (
+            <RowActionMenuItem onClick={onClearActive} icon={<FiXCircle className="w-4 h-4" />}>
+              Stop Working On This Client
+            </RowActionMenuItem>
+          ) : (
+            <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />}>
+              Work On This Client
+            </RowActionMenuItem>
+          )}
           <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />}>
             Open Client Workspace
           </RowActionMenuItem>
@@ -103,11 +110,13 @@ interface ClientsSectionProps {
     isAdmin?: boolean
     onAddClient?: () => void
     refreshTrigger?: number
-    onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email">) => void
-    onSetActiveClient?: (client: Pick<ClientRow, "companyId" | "businessName">) => void
+    onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email" | "companyId">) => void
+    onSetActiveClient?: (client: Pick<ClientRow, "companyId" | "businessName"> | null) => void
+    /** The company id currently being worked on, so the row can offer to stop. */
+    activeCompanyId?: string | null
 }
 
-const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddClient, refreshTrigger, onViewClient, onSetActiveClient }) => {
+const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddClient, refreshTrigger, onViewClient, onSetActiveClient, activeCompanyId = null }) => {
     const router = useRouter()
     const [rows, setRows] = useState<ClientRow[]>([])
     /**
@@ -134,15 +143,13 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
     const [currentPage, setCurrentPage] = useState(0)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFilterOpen, setIsFilterOpen] = useState(false)
-    const [nameSort, setNameSort] = useState<'none' | 'asc' | 'desc'>("none")
+    const [sortBy, setSortBy] = useState<'name' | 'business' | 'industry' | 'retainer' | 'goal' | 'status'>("name")
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>("asc")
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>("all")
-    const [retainerSort, setRetainerSort] = useState<'none' | 'asc' | 'desc'>("none")
+    const [industryFilter, setIndustryFilter] = useState("")
+    const filterRef = useRef<HTMLDivElement>(null)
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-    const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
-    const [bulkDeleting, setBulkDeleting] = useState(false)
-    const [bulkDeleteError, setBulkDeleteError] = useState("")
     const hydratingView = useRef(false)
     const pageSize = 10
     useEffect(() => {
@@ -152,8 +159,13 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         /* eslint-disable react-hooks/set-state-in-effect */
         setSearchQuery(typeof q.q === "string" ? q.q : "")
         setStatusFilter(["active", "inactive", "pending"].includes(String(q.status)) ? q.status as "active" | "inactive" | "pending" : "all")
-        setNameSort(q.nameSort === "asc" || q.nameSort === "desc" ? q.nameSort : "none")
-        setRetainerSort(q.retainerSort === "asc" || q.retainerSort === "desc" ? q.retainerSort : "none")
+        setSortBy(
+            ["name", "business", "industry", "retainer", "goal", "status"].includes(String(q.sortBy))
+                ? (q.sortBy as typeof sortBy)
+                : "name"
+        )
+        setSortDir(q.sortDir === "desc" ? "desc" : "asc")
+        setIndustryFilter(typeof q.industry === "string" ? q.industry : "")
         setCurrentPage(Number.isSafeInteger(Number(q.page)) ? Math.max(0, Number(q.page)) : 0)
         /* eslint-enable react-hooks/set-state-in-effect */
     }, [router.isReady, router.query])
@@ -162,10 +174,22 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         if (!router.isReady || router.query.section !== "clients") return
         if (hydratingView.current) { hydratingView.current = false; return }
         const timer = window.setTimeout(() => {
-            void router.replace({ pathname: router.pathname, query: { ...router.query, q: searchQuery, status: statusFilter, nameSort, retainerSort, page: currentPage } }, undefined, { shallow: true, scroll: false }).catch(() => {})
+            void router.replace({ pathname: router.pathname, query: { ...router.query, q: searchQuery, status: statusFilter, industry: industryFilter, sortBy, sortDir, page: currentPage } }, undefined, { shallow: true, scroll: false }).catch(() => {})
         }, 300)
         return () => window.clearTimeout(timer)
-    }, [searchQuery, statusFilter, nameSort, retainerSort, currentPage, router])
+    }, [searchQuery, statusFilter, industryFilter, sortBy, sortDir, currentPage, router])
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+                setIsFilterOpen(false)
+            }
+        }
+        if (isFilterOpen) {
+            document.addEventListener("mousedown", handleClickOutside)
+            return () => document.removeEventListener("mousedown", handleClickOutside)
+        }
+    }, [isFilterOpen])
 
     const fetchClients = async () => {
         if (fetchPending.current) return false
@@ -196,7 +220,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchClients()
     }, [])
-
 
     useEffect(() => {
         if (refreshTrigger && refreshTrigger > 0) {
@@ -239,68 +262,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         setDeleteError("")
         setClientToDelete(client)
         setDeleteModalOpen(true)
-    }
-
-    const toggleRowSelection = (id: string) => {
-        setSelectedIds(prev => {
-            const next = new Set(prev)
-            if (next.has(id)) next.delete(id)
-            else next.add(id)
-            return next
-        })
-    }
-
-    const togglePageSelection = (keys: string[], nextChecked: boolean) => {
-        setSelectedIds(prev => {
-            const next = new Set(prev)
-            for (const key of keys) {
-                if (nextChecked) next.add(key)
-                else next.delete(key)
-            }
-            return next
-        })
-    }
-
-    const clearSelection = () => setSelectedIds(new Set())
-
-    const handleBulkDeleteClients = async () => {
-        if (activeSelectedIds.size === 0 || mutationPending.current || fetchPending.current) return
-        mutationPending.current = true
-        setBulkDeleting(true)
-        setBulkDeleteError("")
-        setNotice("")
-        const targets = rows.filter(client => activeSelectedIds.has(client.id))
-        // Sequential, not Promise.all: this hits the same admin delete route per client (each of
-        // which also calls out to Supabase Auth), and a bulk removal is rare enough that there's no
-        // reason to fire a burst of concurrent admin-auth calls when one at a time is safer.
-        const failedIds = new Set<string>()
-        const failedNames: string[] = []
-        for (const client of targets) {
-            try {
-                const r = await fetch(`/api/admin/deleteClient?clientId=${client.id}`, { method: "DELETE" })
-                if (!r.ok) throw new Error("failed")
-                const result = await r.json()
-                if (result?.clientId !== client.id) throw new Error("failed")
-            } catch {
-                failedIds.add(client.id)
-                failedNames.push(client.name || client.id)
-            }
-        }
-        const removedIds = new Set(targets.filter(c => !failedIds.has(c.id)).map(c => c.id))
-        setRows(prev => prev.filter(client => !removedIds.has(client.id)))
-        setSelectedIds(new Set())
-        if (failedIds.size > 0) {
-            setBulkDeleteError(
-                failedIds.size === targets.length
-                    ? "Could not remove any of the selected clients. Close this dialog and try again."
-                    : `Removed ${targets.length - failedIds.size} of ${targets.length}. Failed: ${failedNames.join(", ")}.`
-            )
-        } else {
-            setNotice(`Removed ${targets.length} client${targets.length === 1 ? "" : "s"}.`)
-            setBulkDeleteModalOpen(false)
-        }
-        mutationPending.current = false
-        setBulkDeleting(false)
     }
 
     const handleToggleStatus = async (clientId: string, newStatus: boolean) => {
@@ -363,44 +324,57 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                 .some((v) => String(v).toLowerCase().includes(query))
             })
         }
-        const sorted = [...base]
-        if (retainerSort !== 'none') {
-            sorted.sort((a, b) => {
-                const av = typeof a.monthlyRetainer === 'number' ? a.monthlyRetainer : -1
-                const bv = typeof b.monthlyRetainer === 'number' ? b.monthlyRetainer : -1
-                return retainerSort === 'asc' ? av - bv : bv - av
-            })
-        } else if (nameSort !== 'none') {
-            sorted.sort((a, b) => {
-                const an = (a.name || '').toLowerCase()
-                const bn = (b.name || '').toLowerCase()
-                if (an < bn) return nameSort === 'asc' ? -1 : 1
-                if (an > bn) return nameSort === 'asc' ? 1 : -1
-                return 0
-            })
+        if (industryFilter) {
+            base = base.filter((r) => (r.industry || "") === industryFilter)
         }
+        const statusRank: Record<string, number> = { completed: 0, in_progress: 1, pending: 1 }
+        const sorted = [...base].sort((a, b) => {
+            let comparison: number
+            switch (sortBy) {
+                case "retainer":
+                    // Unset sorts last in either direction rather than counting as zero.
+                    comparison =
+                        (typeof a.monthlyRetainer === "number" ? a.monthlyRetainer : -1) -
+                        (typeof b.monthlyRetainer === "number" ? b.monthlyRetainer : -1)
+                    break
+                case "goal":
+                    comparison = (a.clientGoal ?? -1) - (b.clientGoal ?? -1)
+                    break
+                case "status":
+                    comparison = (statusRank[a.status] ?? 2) - (statusRank[b.status] ?? 2)
+                    break
+                case "business":
+                    comparison = (a.businessName || "").localeCompare(b.businessName || "")
+                    break
+                case "industry":
+                    comparison = (a.industry || "").localeCompare(b.industry || "")
+                    break
+                default:
+                    comparison = (a.name || "").localeCompare(b.name || "")
+            }
+            // Name breaks every tie, so the order does not shuffle between renders.
+            if (comparison === 0) comparison = (a.name || "").localeCompare(b.name || "")
+            return sortDir === "asc" ? comparison : -comparison
+        })
         return sorted
-    }, [rows, searchQuery, statusFilter, nameSort, retainerSort])
-
-    // Derived, not synced via an effect: a refetch or a single-row delete can drop ids that are
-    // still in selectedIds, and re-deriving here (rather than pruning selectedIds itself in an
-    // effect) keeps the bulk bar's count from ever including a row that's already gone.
-    const activeSelectedIds = new Set<string>()
-    for (const row of rows) {
-        if (selectedIds.has(row.id)) activeSelectedIds.add(row.id)
-    }
+    }, [rows, searchQuery, statusFilter, industryFilter, sortBy, sortDir])
 
     // Page index clamped rather than reset from an effect. Searching to a shorter list could leave
     // currentPage past the end, and slicing beyond the array renders an empty table with nothing to
     // explain it; the old effect only covered searchQuery, not the status or sort filters.
     const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
     const page = Math.min(currentPage, totalPages - 1)
-    const hasFilters = Boolean(searchQuery.trim() || statusFilter !== "all" || nameSort !== "none" || retainerSort !== "none")
+    /** Every industry present in the data, so the filter offers what can actually be selected. */
+    const industryOptions = useMemo(
+        () => Array.from(new Set(rows.map((r) => r.industry).filter((v): v is string => Boolean(v)))).sort(),
+        [rows]
+    )
     const clearFilters = () => {
         setSearchQuery("")
         setStatusFilter("all")
-        setNameSort("none")
-        setRetainerSort("none")
+        setIndustryFilter("")
+        setSortBy("name")
+        setSortDir("asc")
         setCurrentPage(0)
     }
 
@@ -415,11 +389,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                     value={searchQuery}
                     onChange={setSearchQuery}
                 />
-                <div
-                    className="relative"
-                    onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }}
-                    tabIndex={-1}
-                >
+                <div className="relative" ref={filterRef}>
                     <PanelButton onClick={() => setIsFilterOpen((v) => !v)} icon={<FiFilter className="h-4 w-4" />}>
                         Filter
                         <FiChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
@@ -427,40 +397,22 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                     {isFilterOpen && (
                         <PanelPopover>
                             <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
-                            <div className="mb-4">
-                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Name</span>
-                                <div className="flex gap-2">
-                                    {([["asc", "A–Z"], ["desc", "Z–A"]] as const).map(([dir, label]) => (
-                                        <button
-                                            key={dir}
-                                            type="button"
-                                            onClick={() => { setNameSort(dir); setRetainerSort("none") }}
-                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
-                                                nameSort === dir ? "bg-[#701CC0] text-white" : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
-                                            }`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="mb-4">
-                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Monthly Retainer</span>
-                                <div className="flex gap-2">
-                                    {([["asc", "Low → High"], ["desc", "High → Low"]] as const).map(([dir, label]) => (
-                                        <button
-                                            key={dir}
-                                            type="button"
-                                            onClick={() => { setRetainerSort(dir); setNameSort("none") }}
-                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
-                                                retainerSort === dir ? "bg-[#701CC0] text-white" : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
-                                            }`}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            <PanelSelect
+                                label="Sort By"
+                                value={sortBy}
+                                onChange={(value) => {
+                                    setSortBy(value as typeof sortBy)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "name", label: "Client Name" },
+                                    { value: "business", label: "Business" },
+                                    { value: "industry", label: "Industry" },
+                                    { value: "retainer", label: "Monthly Retainer" },
+                                    { value: "goal", label: "Client Goal" },
+                                    { value: "status", label: "Status" },
+                                ]}
+                            />
                             <PanelSelect
                                 label="Status"
                                 value={statusFilter}
@@ -472,11 +424,43 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                     { value: "pending", label: "Pending" },
                                 ]}
                             />
+                            <PanelSelect
+                                label="Industry"
+                                value={industryFilter}
+                                onChange={(value) => {
+                                    setIndustryFilter(value)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "", label: "All Industries" },
+                                    ...industryOptions.map((industry) => ({ value: industry, label: industry })),
+                                ]}
+                            />
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Order</span>
+                                <div className="flex gap-2">
+                                    {(["asc", "desc"] as const).map((dir) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => {
+                                                setSortDir(dir)
+                                                setCurrentPage(0)
+                                            }}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                sortDir === dir
+                                                    ? "bg-[#701CC0] text-white"
+                                                    : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {dir === "asc" ? "Ascending" : "Descending"}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <PanelClearFilters
                                 onClick={() => {
-                                    setNameSort("none")
-                                    setRetainerSort("none")
-                                    setStatusFilter("all")
+                                    clearFilters()
                                     setIsFilterOpen(false)
                                 }}
                             />
@@ -488,17 +472,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                 </PanelButton>
             </PanelHeader>
 
-            {isAdmin && (
-                <PanelBulkBar count={activeSelectedIds.size} onClear={clearSelection} label={(n) => `${n} client${n === 1 ? "" : "s"} selected`}>
-                    <PanelButton
-                        onClick={() => { setBulkDeleteError(""); setBulkDeleteModalOpen(true) }}
-                        icon={<FiTrash2 className="h-4 w-4" />}
-                    >
-                        Remove
-                    </PanelButton>
-                </PanelBulkBar>
-            )}
-
             <PanelDataTable<ClientRow>
                 rows={filteredRows}
                 getRowKey={(r) => r.id}
@@ -507,29 +480,9 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyTitle={hasFilters ? "No Clients Found" : "No Clients Yet"}
-                emptyMessage={
-                    hasFilters ? "No clients match your search." : "Clients you add will appear here."
-                }
+                emptyTitle="No Clients Found"
+                emptyMessage="No clients match your search."
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
-                emptyAction={
-                    hasFilters ? (
-                        <PanelButton onClick={clearFilters}>Clear All Filters</PanelButton>
-                    ) : (
-                        <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
-                            Add Client
-                        </PanelButton>
-                    )
-                }
-                selection={
-                    isAdmin
-                        ? {
-                              selectedKeys: activeSelectedIds,
-                              onToggleRow: toggleRowSelection,
-                              onTogglePage: togglePageSelection,
-                          }
-                        : undefined
-                }
                 columns={[
                     {
                         key: "name",
@@ -545,7 +498,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 <div className="min-w-0">
                                     <button
                                         type="button"
-                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
                                         className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
                                     >
                                         {r.name || "—"}
@@ -598,8 +551,10 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 isAdmin={isAdmin}
                                 busy={updatingClient === r.id || deleting}
                                 triggerId={`open-client-${r.id}`}
-                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
+                                isWorkingOn={activeCompanyId === r.companyId}
                                 onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
+                                onClearActive={() => onSetActiveClient?.(null)}
                                 onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                 onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
                             />
@@ -636,30 +591,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
             if (mutationPending.current) return
             setDeleteModalOpen(false)
             setClientToDelete(null)
-          }}
-        />
-
-        <ConfirmActionModal
-          isOpen={bulkDeleteModalOpen}
-          title="Remove Clients"
-          message={
-            <>
-              Are you sure you want to remove{" "}
-              <span className="font-semibold text-[#111827]">
-                {activeSelectedIds.size} client{activeSelectedIds.size === 1 ? "" : "s"}
-              </span>
-              ? This action is permanent and cannot be undone.
-            </>
-          }
-          confirmLabel="Remove Clients"
-          busy={bulkDeleting}
-          busyLabel="Removing…"
-          error={bulkDeleteError}
-          onConfirm={handleBulkDeleteClients}
-          onCancel={() => {
-            if (mutationPending.current) return
-            setBulkDeleteModalOpen(false)
-            setBulkDeleteError("")
           }}
         />
         </>
