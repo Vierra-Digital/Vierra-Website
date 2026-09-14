@@ -456,10 +456,15 @@ export default function ProjectManagement() {
     return (
       <div className={inter.className}>
         <PanelPage>
-          <PanelHeader title="Project Management" />
-          <div className="mb-4 grid grid-cols-2 gap-3 pb-2 lg:grid-cols-4">
+          {/* The picker and the action sit in the header once loaded; without them here the
+              header grew by a row the moment boards arrived. */}
+          <PanelHeader title="Project Management">
+            <div className="h-9 w-[190px] animate-pulse rounded-lg bg-[#F1EFF6]" />
+            <div className="h-9 w-[104px] animate-pulse rounded-lg bg-[#F1EFF6]" />
+          </PanelHeader>
+          <div className="mb-6 grid grid-cols-2 gap-3 pb-2 lg:grid-cols-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="rounded-xl bg-[#F1EFF6] px-3.5 py-3.5">
+              <div key={i} className="rounded-xl bg-[#F1EFF6] px-4 py-4">
                 <div className="mb-2 h-2.5 w-20 animate-pulse rounded bg-[#E3DEEE]" />
                 <div className="h-[22px] w-10 animate-pulse rounded bg-[#E3DEEE]" />
               </div>
@@ -639,10 +644,24 @@ export default function ProjectManagement() {
           {/* These count the board that is open, after search and filters — the same set the
               columns below are drawing, not a company-wide total. */}
           <div className="mb-6 grid grid-cols-2 gap-3 pb-2 lg:grid-cols-4">
-            <PanelStat label="Tasks" value={visibleTasks.length} />
-            <PanelStat label="In Progress" value={tasksByStatus.ongoing.length} />
-            <PanelStat label="Awaiting Review" value={tasksByStatus.under_review.length} />
-            <PanelStat label="Overdue" value={overdueCount} />
+            {/* Skeletons while the tasks are still in flight. Rendering the real counters here
+                showed four zeros for the length of the request and then jumped to the true
+                numbers — a board that looks empty before it looks full. */}
+            {loading ? (
+              [0, 1, 2, 3].map((i) => (
+                <div key={i} className="rounded-xl bg-[#F1EFF6] px-4 py-4">
+                  <div className="mb-2 h-2.5 w-20 animate-pulse rounded bg-[#E3DEEE]" />
+                  <div className="h-[22px] w-10 animate-pulse rounded bg-[#E3DEEE]" />
+                </div>
+              ))
+            ) : (
+              <>
+                <PanelStat label="Tasks" value={visibleTasks.length} />
+                <PanelStat label="In Progress" value={tasksByStatus.ongoing.length} />
+                <PanelStat label="Awaiting Review" value={tasksByStatus.under_review.length} />
+                <PanelStat label="Overdue" value={overdueCount} />
+              </>
+            )}
           </div>
 
           <div className="flex-1 min-h-0">

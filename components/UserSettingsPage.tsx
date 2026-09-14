@@ -478,6 +478,31 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     return null;
   };
 
+  /**
+   * Emails the client a link to set their own password. Nothing here learns or sets it.
+   */
+  const sendClientPasswordReset = async () => {
+    if (!billingCompanyId) return;
+    setIsUpdating(true);
+    setUpdateMessage(null);
+    try {
+      const response = await fetch(
+        `/api/client/password-reset?companyId=${encodeURIComponent(billingCompanyId)}`,
+        { method: "POST" }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.message || "Could not send the reset email.");
+      setUpdateMessage({ type: "success", text: body?.message || "Password reset sent." });
+    } catch (error) {
+      setUpdateMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Could not send the reset email.",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleNameUpdate = async () => {
     setIsUpdating(true);
     setUpdateMessage(null);
@@ -576,8 +601,16 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         try {
           const base64Data = reader.result as string;
           const base64 = base64Data.split(',')[1];
-          
-          const response = await fetch("/api/profile/uploadImage", {
+
+          /**
+           * A client's picture lives on their own row; yours lives in user_preferences. The
+           * profile route writes to whoever is signed in, so sending a client's upload there
+           * would have replaced the staff member's own avatar.
+           */
+          const managingClient = readOnly && canManageClient && billingCompanyId;
+          const response = await fetch(managingClient
+            ? `/api/client/image?companyId=${encodeURIComponent(billingCompanyId)}`
+            : "/api/profile/uploadImage", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
@@ -633,10 +666,15 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setUpdateMessage(null);
     
     try {
-      const response = await fetch("/api/profile/uploadImage", {
+      // Same routing as the upload: resetting a client's picture must not clear the staff
+      // member's own.
+      const managingClient = readOnly && canManageClient && billingCompanyId;
+      const response = await fetch(managingClient
+        ? `/api/client/image?companyId=${encodeURIComponent(billingCompanyId)}`
+        : "/api/profile/uploadImage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           imageData: null,
           mimeType: null
         }),
@@ -933,7 +971,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 priority
                 quality={100}
               />
-              {!readOnly && (
+              {settingsEditable && (
               <button
                 type="button"
                 onClick={() => setShowAvatarMenu(!showAvatarMenu)}
@@ -1032,15 +1070,20 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
             {/* A hairline is enough to separate an action from the toggles above it; the rule
                 plus a full row of padding read as a gap in the card. Sized like Add account. */}
-            {!readOnly && (
+            {settingsEditable && (
             <div className={`mt-1 border-t pt-3 ${isDark ? "border-white/10" : "border-[#EEF1F7]"}`}>
+              {/* A link, not a field, when it is someone else's account. An admin typing a new
+                  password would mean knowing a credential that is not theirs and passing it on out
+                  of band; a reset goes to the address on file. Same choice /api/admin/userPassword
+                  already makes for staff. */}
               <button
                 type="button"
-                onClick={() => setShowPasswordModal(true)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#701CC0] px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
+                onClick={() => (readOnly ? void sendClientPasswordReset() : setShowPasswordModal(true))}
+                disabled={isUpdating}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#701CC0] px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FiLock className="h-3.5 w-3.5" />
-                Change Password
+                {readOnly ? "Send Password Reset" : "Change Password"}
               </button>
             </div>
             )}
