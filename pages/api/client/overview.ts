@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Everything the client overview shows, in one request.
@@ -29,10 +29,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (session.kind === "unaffiliated") {
       return res.status(403).json({ message: "Forbidden" });
     }
-    // resolveTargetCompanyId falls back to Vierra's own company when a staff member names none
-    // (see lib/api/targetCompany.ts). This route reads exactly one client's data, so a staff
-    // member who hasn't picked a client must be told to, not silently land on Vierra's row.
-    const companyId = hasExplicitTargetCompanyId(session, req) ? resolveTargetCompanyId(session, req) : null;
+    // This route reads exactly one client's data, so a staff member who hasn't picked a client
+    // must be told to, not silently land on Vierra's own company — see resolveExplicitTargetCompanyId
+    // (lib/api/targetCompany.ts).
+    const companyId = resolveExplicitTargetCompanyId(session, req);
     if (!companyId) {
       return res.status(400).json({ message: "companyId is required" });
     }

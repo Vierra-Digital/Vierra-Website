@@ -29,8 +29,13 @@ type Month = { month: number; revenueCents: number; expenseCents: number; profit
 
 type Overview = {
     year: number
-    /** What Stripe collected, when Stripe was reachable. Null means ledger only. */
-    collected: { totalCents: number; byMonth: number[] } | null
+    /**
+     * What Stripe collected — the same figure as `totals.revenueCents`/`months[].revenueCents`,
+     * both read from the same Stripe-synced ledger (see pages/api/finances/overview.ts). Kept as
+     * its own field so this tile needs no change from when it was a separate, independently-pulled
+     * live Stripe figure that could disagree with the ledger; now it can't.
+     */
+    collected: { totalCents: number; byMonth: number[] }
     months: Month[]
     totals: { revenueCents: number; expenseCents: number; profitCents: number }
     currentMonth: {
@@ -145,8 +150,8 @@ const FinancesSection: React.FC = () => {
                             />
                             <PanelStat
                                 label="Collected"
-                                value={data.collected ? money(data.collected.totalCents) : "—"}
-                                hint={data.collected ? `Paid invoices in ${data.year}` : "Stripe unavailable"}
+                                value={money(data.collected.totalCents)}
+                                hint={`Paid invoices in ${data.year}`}
                             />
                             <PanelStat
                                 label="Profit"
@@ -163,15 +168,12 @@ const FinancesSection: React.FC = () => {
                         <PanelCard className="mb-4">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
                                 <h3 className="text-[13px] font-semibold text-[#111827]">{data.year} By Month</h3>
-                                {/* The ledger being empty is a fact about the data, not a rendering
+                                {/* Nothing recorded is a fact about the data, not a rendering
                                     fault, and the dashboard's tiles read the same rows — so it is
                                     said here rather than left as twelve empty bars. */}
                                 {data.totals.revenueCents === 0 && data.totals.expenseCents === 0 && (
                                     <span className="text-[12px] text-[#6B7280]">
-                                        No ledger entries recorded for {data.year}
-                                        {data.collected && data.collected.totalCents > 0
-                                            ? ` — Stripe collected ${money(data.collected.totalCents)}`
-                                            : ""}
+                                        No revenue or expenses recorded for {data.year}
                                     </span>
                                 )}
                             </div>

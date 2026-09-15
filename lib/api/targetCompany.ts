@@ -53,3 +53,21 @@ export function hasExplicitTargetCompanyId(session: MemberSession | ClientSessio
   if (session.kind === "client") return true;
   return explicitCompanyIdFromRequest(req) !== null;
 }
+
+/**
+ * The one call every single-client route makes: `resolveTargetCompanyId`'s answer when it came
+ * from an explicit choice, or null when a staff member hasn't named one. Routes that read/write
+ * exactly one client's data (billing, settings, CAN-SPAM address, …) need this instead of
+ * `resolveTargetCompanyId` alone — that function's own fallback to Vierra's own company (see its
+ * doc comment) is right for tools like Cartography that also work Vierra's own pipeline, but wrong
+ * here, where a staff member with no client picked must be told to, not silently land on Vierra's
+ * row. Was six near-identical `hasExplicitTargetCompanyId(...) ? resolveTargetCompanyId(...) :
+ * null` ternaries, each with its own copy of this same explanation, one per route — one place to
+ * fix if the rule ever changes, and one fewer copy to fall out of sync if it does.
+ */
+export function resolveExplicitTargetCompanyId(
+  session: MemberSession | ClientSession,
+  req: NextApiRequest
+): string | null {
+  return hasExplicitTargetCompanyId(session, req) ? resolveTargetCompanyId(session, req) : null;
+}

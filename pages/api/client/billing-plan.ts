@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 import { resolveBillingClient } from "@/lib/api/billingClient";
 
 /**
@@ -29,8 +29,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Same rule as the other client-scoped billing routes: an admin who hasn't picked a client must
-  // be told to, not silently land on Vierra's own company. See lib/api/targetCompany.ts.
-  const companyId = hasExplicitTargetCompanyId(session, req) ? resolveTargetCompanyId(session, req) : null;
+  // be told to, not silently land on Vierra's own company. See resolveExplicitTargetCompanyId
+  // (lib/api/targetCompany.ts).
+  const companyId = resolveExplicitTargetCompanyId(session, req);
   if (!companyId) return res.status(400).json({ message: "companyId is required" });
 
   const { newRetainerCents } = req.body ?? {};
@@ -68,26 +69,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const oldAmountCents = item.price?.unit_amount ?? client.client_billing.monthly_retainer_cents ?? 0;
     const productId = await getRetainerProductId(stripe);
+    const priceItem = (amountCents: number) => ({
+      id: item.id,
+      price_data: {
+        currency: "usd",
+        unit_amount: amountCents,
+        recurring: { interval: "month" as const },
+        product: productId,
+      },
+    });
 
     const updated = await stripe.subscriptions.update(subscription.id, {
-      items: [
-        {
-          id: item.id,
-          price_data: {
-            currency: "usd",
-            unit_amount: newRetainerCents,
-            recurring: { interval: "month" },
-            product: productId,
-          },
-        },
-      ],
+      items: [priceItem(newRetainerCents)],
       proration_behavior: "none",
     });
 
-    await prisma.clientBilling.update({
-      where: { client_id: client.id },
-      data: { monthly_retainer_cents: newRetainerCents },
-    });
+    try {
+      await prisma.clientBilling.update({
+        where: { client_id: client.id },
+        data: { monthly_retainer_cents: newRetainerCents },
+      });
+    } catch (dbError) {
+      // Stripe already committed the new price; leaving it there while the DB (and the client,
+      // who hasn't been emailed yet) still says the old amount would be a silent, permanent
+      // divergence. Best-effort revert Stripe back to the old price instead, so the two stay in
+      // agreement even though this attempt failed, and report a clean failure rather than 200.
+      console.error(
+        `billing-plan: DB update failed after Stripe price change for client ${client.id} (subscription ${subscription.id}) — reverting Stripe to $${oldAmountCents / 100}`,
+        dbError
+      );
+      try {
+        await stripe.subscriptions.update(subscription.id, {
+          items: [priceItem(oldAmountCents)],
+          proration_behavior: "none",
+        });
+      } catch (revertError) {
+        console.error(
+          `billing-plan: also failed to revert Stripe for client ${client.id} (subscription ${subscription.id}) — Stripe now bills $${newRetainerCents / 100} while our records say $${oldAmountCents / 100}; needs manual reconciliation`,
+          revertError
+        );
+      }
+      return res.status(502).json({ message: "Could not save the plan change. Nothing was billed differently — try again." });
+    }
 
     const periodEnd =
       (updated as unknown as { current_period_end?: number }).current_period_end ??

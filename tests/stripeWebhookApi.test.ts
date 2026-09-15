@@ -1,18 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * /api/stripe/webhook — idempotency (a redelivered event.id is a no-op) and the invoice.paid /
- * invoice.payment_failed sync into stripe_invoices, added alongside the pre-existing
- * checkout/setup-intent/subscription-status handling.
+ * /api/stripe/webhook — idempotency and the invoice.paid/invoice.payment_failed sync into
+ * stripe_invoices, added alongside the pre-existing checkout/setup-intent/subscription-status
+ * handling.
  *
- * A thrown error inside a handler branch must 500 (so Stripe retries), not throw unhandled — and
- * must not record the event as seen, since it wasn't actually processed.
+ * Idempotency claims the event.id via the create() call itself (a unique-constraint violation IS
+ * the duplicate signal), not a separate find-then-create — a genuinely concurrent duplicate
+ * delivery would otherwise pass a find before either request had inserted, reprocessing the event
+ * twice. A processing failure releases the claim (deletes the row) before 500ing, so a Stripe
+ * retry reprocesses rather than being swallowed as an already-seen duplicate.
  */
+
+function prismaUniqueViolation() {
+  return Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+}
 
 const {
   constructEventMock,
-  webhookEventFindUnique,
   webhookEventCreate,
+  webhookEventDelete,
   clientBillingUpdateMany,
   clientBillingFindFirst,
   stripeInvoiceUpsert,
@@ -20,8 +27,8 @@ const {
   subscriptionsRetrieve,
 } = vi.hoisted(() => ({
   constructEventMock: vi.fn(),
-  webhookEventFindUnique: vi.fn(),
   webhookEventCreate: vi.fn(),
+  webhookEventDelete: vi.fn(),
   clientBillingUpdateMany: vi.fn(),
   clientBillingFindFirst: vi.fn(),
   stripeInvoiceUpsert: vi.fn(),
@@ -39,7 +46,7 @@ vi.mock("@/lib/stripe", () => ({
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    stripeWebhookEvent: { findUnique: webhookEventFindUnique, create: webhookEventCreate },
+    stripeWebhookEvent: { create: webhookEventCreate, delete: webhookEventDelete },
     clientBilling: { updateMany: clientBillingUpdateMany, findFirst: clientBillingFindFirst },
     stripeInvoice: { upsert: stripeInvoiceUpsert },
   },
@@ -82,24 +89,15 @@ const call = (event: unknown) => {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
-  webhookEventFindUnique.mockResolvedValue(null);
   webhookEventCreate.mockResolvedValue({});
+  webhookEventDelete.mockResolvedValue({});
   clientBillingUpdateMany.mockResolvedValue({ count: 1 });
   clientBillingFindFirst.mockResolvedValue({ client_id: "cl1", clients: { company_id: "co1" } });
   stripeInvoiceUpsert.mockResolvedValue({});
 });
 
 describe("idempotency", () => {
-  it("skips reprocessing a redelivered event.id", async () => {
-    webhookEventFindUnique.mockResolvedValue({ id: "row1", stripe_event_id: "evt_1" });
-    const res = await call({ id: "evt_1", type: "customer.subscription.updated", data: { object: {} } });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ duplicate: true });
-    expect(clientBillingUpdateMany).not.toHaveBeenCalled();
-    expect(webhookEventCreate).not.toHaveBeenCalled();
-  });
-
-  it("records a newly processed event so a later redelivery is caught", async () => {
+  it("claims the event by inserting first, before any processing", async () => {
     const event = {
       id: "evt_2",
       type: "customer.subscription.updated",
@@ -110,6 +108,26 @@ describe("idempotency", () => {
     expect(webhookEventCreate).toHaveBeenCalledWith({
       data: { stripe_event_id: "evt_2", event_type: "customer.subscription.updated" },
     });
+    // Claimed before the handler ran — this call ordering is what makes a concurrent duplicate
+    // delivery safe (the loser's create() hits the unique constraint before doing any work).
+    expect(webhookEventCreate.mock.invocationCallOrder[0]).toBeLessThan(clientBillingUpdateMany.mock.invocationCallOrder[0]);
+  });
+
+  it("treats a unique-constraint violation on the claim as a duplicate, without reprocessing", async () => {
+    webhookEventCreate.mockRejectedValue(prismaUniqueViolation());
+    const res = await call({ id: "evt_1", type: "customer.subscription.updated", data: { object: {} } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ duplicate: true });
+    expect(clientBillingUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("500s and logs (not throws) if recording the claim fails for a non-duplicate reason", async () => {
+    webhookEventCreate.mockRejectedValue(new Error("db down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await call({ id: "evt_9", type: "customer.subscription.updated", data: { object: {} } });
+    expect(res.statusCode).toBe(500);
+    expect(clientBillingUpdateMany).not.toHaveBeenCalled();
+    err.mockRestore();
   });
 });
 
@@ -149,13 +167,14 @@ describe("invoice sync", () => {
     const res = await call({ id: "evt_4", type: "invoice.payment_failed", data: { object: invoice } });
     expect(res.statusCode).toBe(200);
     expect(stripeInvoiceUpsert).not.toHaveBeenCalled();
-    // A skip is not a processing failure — the event is still recorded as seen.
-    expect(webhookEventCreate).toHaveBeenCalled();
+    // A skip is not a processing failure — the claim stands, so a redelivery of the same event
+    // doesn't reprocess it either.
+    expect(webhookEventDelete).not.toHaveBeenCalled();
   });
 });
 
 describe("failure", () => {
-  it("500s and does not record the event when a handler branch throws", async () => {
+  it("500s and releases the claim when a handler branch throws, so a retry can reprocess", async () => {
     clientBillingUpdateMany.mockRejectedValue(new Error("db down"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await call({
@@ -164,7 +183,20 @@ describe("failure", () => {
       data: { object: { id: "sub_1", customer: "cus_1", status: "active" } },
     });
     expect(res.statusCode).toBe(500);
-    expect(webhookEventCreate).not.toHaveBeenCalled();
+    expect(webhookEventDelete).toHaveBeenCalledWith({ where: { stripe_event_id: "evt_5" } });
+    err.mockRestore();
+  });
+
+  it("still 500s even if releasing the claim itself fails", async () => {
+    clientBillingUpdateMany.mockRejectedValue(new Error("db down"));
+    webhookEventDelete.mockRejectedValue(new Error("also db down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await call({
+      id: "evt_6",
+      type: "customer.subscription.updated",
+      data: { object: { id: "sub_1", customer: "cus_1", status: "active" } },
+    });
+    expect(res.statusCode).toBe(500);
     err.mockRestore();
   });
 });
@@ -179,7 +211,7 @@ describe("signature verification", () => {
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     await handler(req as never, res as never);
     expect(res.statusCode).toBe(400);
-    expect(webhookEventFindUnique).not.toHaveBeenCalled();
+    expect(webhookEventCreate).not.toHaveBeenCalled();
     err.mockRestore();
   });
 });

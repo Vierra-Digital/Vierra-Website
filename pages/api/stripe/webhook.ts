@@ -154,12 +154,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Stripe redelivers an event that wasn't acknowledged in time, or on request (stripe events
-  // resend). event.id is stable per event, so a prior sighting means this delivery is a repeat.
-  const alreadySeen = await prisma.stripeWebhookEvent.findUnique({
-    where: { stripe_event_id: event.id },
-  })
-  if (alreadySeen) {
-    return res.status(200).json({ received: true, duplicate: true })
+  // resend), and can even deliver a genuine duplicate concurrently rather than serially — a
+  // find-then-create here would let both requests pass the find before either had inserted,
+  // reprocessing the event twice and throwing an uncaught unique-constraint error from whichever
+  // create() lost the race. Claiming the row with the insert itself (matching the same pattern
+  // pages/api/campaigns/webhooks/smartlead.ts uses) makes the claim atomic: only one concurrent
+  // request can win it, and the unique-constraint violation on the insert IS the duplicate signal
+  // for the other. Unlike Smartlead's webhook, a processing failure below must still let Stripe
+  // retry, so the claim is released (the row deleted) if the handler throws.
+  try {
+    await prisma.stripeWebhookEvent.create({
+      data: { stripe_event_id: event.id, event_type: event.type },
+    })
+  } catch (err) {
+    if ((err as { code?: string })?.code === "P2002") {
+      return res.status(200).json({ received: true, duplicate: true })
+    }
+    console.error(`Stripe webhook: failed to record event ${event.id}:`, err)
+    return res.status(500).json({ message: "Webhook handler failed." })
   }
 
   try {
@@ -195,14 +207,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } catch (err) {
     console.error(`Stripe webhook handler failed for ${event.type} (${event.id}):`, err)
+    // Release the claim so a Stripe retry (triggered by this 500) can reprocess rather than being
+    // silently swallowed as an already-seen duplicate.
+    await prisma.stripeWebhookEvent.delete({ where: { stripe_event_id: event.id } }).catch(() => {})
     // 500 so Stripe retries the delivery — this is a processing failure, not a signal that the
     // event was malformed or already handled.
     return res.status(500).json({ message: "Webhook handler failed." })
   }
-
-  await prisma.stripeWebhookEvent.create({
-    data: { stripe_event_id: event.id, event_type: event.type },
-  })
 
   return res.status(200).json({ received: true })
 }

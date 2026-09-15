@@ -168,6 +168,45 @@ describe("happy path", () => {
   });
 });
 
+describe("DB write fails after Stripe already changed", () => {
+  it("reverts the Stripe price back to the old amount and reports failure, not 200", async () => {
+    clientBillingUpdate.mockRejectedValue(new Error("db down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await call({ body: { newRetainerCents: 150000 } });
+
+    expect(res.statusCode).toBe(502);
+    // First call is the intended change to 150000; second is the revert back to the original
+    // 100000 — both against the same subscription item, so Stripe and our DB stay in agreement.
+    expect(subscriptionsUpdate).toHaveBeenCalledTimes(2);
+    expect(subscriptionsUpdate).toHaveBeenNthCalledWith(
+      2,
+      "sub_1",
+      expect.objectContaining({
+        proration_behavior: "none",
+        items: [expect.objectContaining({ id: "si_1", price_data: expect.objectContaining({ unit_amount: 100000 }) })],
+      })
+    );
+    // Nothing to notify the client about — the change never actually stuck.
+    expect(sendPlanChangeEmailMock).not.toHaveBeenCalled();
+    err.mockRestore();
+  });
+
+  it("still reports failure even if the revert itself fails", async () => {
+    clientBillingUpdate.mockRejectedValue(new Error("db down"));
+    subscriptionsUpdate.mockImplementationOnce(async () => ({
+      id: "sub_1",
+      items: { data: [{ current_period_end: 1702592000 }] },
+    })).mockRejectedValueOnce(new Error("stripe also down"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await call({ body: { newRetainerCents: 150000 } });
+
+    expect(res.statusCode).toBe(502);
+    err.mockRestore();
+  });
+});
+
 describe("no active subscription", () => {
   it("404s rather than creating a subscription", async () => {
     subscriptionsList.mockResolvedValue({ data: [{ id: "sub_old", status: "canceled", items: { data: [] } }] });
