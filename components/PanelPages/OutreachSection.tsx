@@ -894,13 +894,11 @@ const OutreachSection = () => {
                                     <div className="mb-4 w-full sm:max-w-xs">
                                         <PanelFieldLabel>Client</PanelFieldLabel>
                                         <PanelFieldSelect
+                                            aria-label="Client"
                                             value={selectedClientId}
                                             onChange={(value) => void changeView(() => setClientChoice(value))}
-                                        >
-                                            {clients.map((c) => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
-                                            ))}
-                                        </PanelFieldSelect>
+                                            options={clients.map((c) => ({ value: c.id, label: c.name }))}
+                                        />
                                     </div>
 
                                     {(() => {

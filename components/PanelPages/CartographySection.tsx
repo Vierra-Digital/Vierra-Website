@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import PanelCombobox from "@/components/panel/PanelCombobox";
 import { FiSearch, FiZap, FiInbox, FiExternalLink } from "react-icons/fi";
 import type { CartographyAgentCandidate, SubAgentTaskResult } from "@/pages/api/cartography/agent";
 import type { CartographySearchResult } from "@/pages/api/cartography/search";
@@ -267,32 +268,33 @@ const CartographySection: React.FC = () => {
             </div>
             {mode === "search" ? (
               <>
-                <select
-                  value={centerCity}
-                  onChange={(event) => setCenterCity(event.target.value)}
-                  aria-label="Filter by distance from city"
-                  className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0]/25"
-                >
-                  <option value="">Any location</option>
-                  {referenceLocations.map((c) => (
-                    <option key={c.location} value={c.location}>
-                      {c.location} ({c.count})
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={radiusMiles}
-                  onChange={(event) => setRadiusMiles(Number(event.target.value))}
-                  disabled={!centerCity}
-                  aria-label="Distance radius"
-                  className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0]/25 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {RADIUS_OPTIONS_MILES.map((mi) => (
-                    <option key={mi} value={mi}>
-                      within {mi} mi
-                    </option>
-                  ))}
-                </select>
+                <div className="w-48 shrink-0">
+                  <PanelCombobox
+                    aria-label="Filter by distance from city"
+                    value={centerCity}
+                    onChange={setCenterCity}
+                    placeholder="Any location"
+                    options={[
+                      { value: "", label: "Any location" },
+                      ...referenceLocations.map((c) => ({
+                        value: c.location,
+                        label: `${c.location} (${c.count})`,
+                      })),
+                    ]}
+                  />
+                </div>
+                <div className="w-36 shrink-0">
+                  <PanelCombobox
+                    aria-label="Distance radius"
+                    value={String(radiusMiles)}
+                    onChange={(value) => setRadiusMiles(Number(value))}
+                    disabled={!centerCity}
+                    options={RADIUS_OPTIONS_MILES.map((mi) => ({
+                      value: String(mi),
+                      label: `within ${mi} mi`,
+                    }))}
+                  />
+                </div>
               </>
             ) : null}
             <button

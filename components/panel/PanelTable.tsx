@@ -1,7 +1,8 @@
 "use client"
 
 import React from "react"
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import PanelCombobox from "@/components/panel/PanelCombobox"
+import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 
 /**
  * The shared furniture for a panel list page — page header, toolbar controls, table card,
@@ -129,11 +130,14 @@ export const PANEL_FIELD =
   "h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
 
 /**
- * A select with our own chevron.
+ * The panel's dropdown.
  *
- * Left native, each select drew the platform's arrow at whatever inset the platform chose, so a
- * stack of them had arrows at different distances from the edge. `appearance-none` plus one
- * absolutely positioned icon puts every arrow in the same place.
+ * Drawn by PanelCombobox rather than by `<select>`. A native select's open list belongs to the
+ * operating system: it ignores the panel's radius, colours and font entirely, which is why a
+ * trigger that matched the fields beside it still opened something that looked like another
+ * product. Restyling the trigger could never reach the part people actually look at.
+ *
+ * The signature is unchanged, so every call site keeps working.
  */
 export const PanelSelect: React.FC<{
   label: string
@@ -141,26 +145,10 @@ export const PanelSelect: React.FC<{
   onChange: (value: string) => void
   options: Array<{ value: string; label: string }>
 }> = ({ label, value, onChange, options }) => (
-  <label className="mb-4 block last:mb-0">
+  <div className="mb-4 last:mb-0">
     <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">{label}</span>
-    <span className="relative block">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`${PANEL_FIELD} appearance-none pr-9`}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]"
-        aria-hidden
-      />
-    </span>
-  </label>
+    <PanelCombobox aria-label={label} value={value} onChange={onChange} options={options} />
+  </div>
 )
 
 /**

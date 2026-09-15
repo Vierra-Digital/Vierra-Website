@@ -318,9 +318,9 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                         ))
                                     ) : (
                                         <>
-                                            <dt className="text-[#6B7280]">Billed to</dt>
+                                            <dt className="text-[#6B7280]">Billed To</dt>
                                             <dd className="text-[#6B7280]">
-                                                Not set. Captured at the first payment, or set in Stripe.
+                                                Not Set. Captured at the first payment, or set in Stripe.
                                             </dd>
                                         </>
                                     )}

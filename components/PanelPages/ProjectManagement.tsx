@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import PanelCombobox from "@/components/panel/PanelCombobox";
 import { inter } from "@/lib/fonts";
 import {
   PanelButton,
@@ -578,15 +579,17 @@ export default function ProjectManagement() {
               {/* A picker, not a chip each. Four boards plus a search box, a filter and New Task
                   filled the row edge to edge, and every board but one was a button you were not
                   going to press. */}
-              <label className="relative inline-flex items-center">
-                <span className="sr-only">Board</span>
-                <span className="pointer-events-none absolute left-3 text-[#701CC0]">
-                  {selectedBoard ? boardIcon(selectedBoard.name) : null}
-                </span>
-                <select
+              <div className="w-48">
+                <PanelCombobox
+                  aria-label="Board"
+                  leading={
+                    <span className="shrink-0 text-[#701CC0]">
+                      {selectedBoard ? boardIcon(selectedBoard.name) : null}
+                    </span>
+                  }
                   value={selectedBoard?.id ?? ""}
-                  onChange={(event) => {
-                    const board = boards.find((b) => b.id === event.target.value);
+                  onChange={(value) => {
+                    const board = boards.find((b) => b.id === value);
                     if (!board) return;
                     setTasks([]);
                     setSelectedBoard(board);
@@ -598,19 +601,9 @@ export default function ProjectManagement() {
                       )
                       .catch(() => {});
                   }}
-                  className="h-9 appearance-none rounded-[10px] bg-[#F4F2F8] pl-10 pr-9 text-[13px] font-medium text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
-                >
-                  {boards.map((board) => (
-                    <option key={board.id} value={board.id}>
-                      {board.name}
-                    </option>
-                  ))}
-                </select>
-                <FiChevronDown
-                  className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]"
-                  aria-hidden
+                  options={boards.map((board) => ({ value: board.id, label: board.name }))}
                 />
-              </label>
+              </div>
               {isAdmin && (
                 <button
                   onClick={() => setShowAddModal(true)}
@@ -1522,23 +1515,17 @@ function EditTaskModal({
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">Status</label>
-                <div className="relative">
-                  <select
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as ProjectTaskStatus)}
-                    className="w-full border border-[#E5E7EB] rounded-xl pl-4 pr-12 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
-                  >
-                    <option value="not_started">Not Started</option>
-                    <option value="ongoing">Ongoing</option>
-                    <option value="under_review">Under Review</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
-                    <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
+                <PanelCombobox
+                  aria-label="Status"
+                  value={status}
+                  onChange={(value) => setStatus(value as ProjectTaskStatus)}
+                  options={[
+                    { value: "not_started", label: "Not Started" },
+                    { value: "ongoing", label: "Ongoing" },
+                    { value: "under_review", label: "Under Review" },
+                    { value: "completed", label: "Completed" },
+                  ]}
+                />
               </div>
             </div>
           )}

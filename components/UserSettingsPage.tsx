@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import PanelCombobox from "@/components/panel/PanelCombobox";
 import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import Modal from "@/components/ui/Modal";
@@ -11,7 +12,7 @@ import {
 } from "@/components/ui/PanelForm";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiChevronDown, FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
+import { FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -46,7 +47,22 @@ interface UserSettingsPageProps {
    * picture and password stay theirs, and `readOnly` still governs those.
    */
   canManageClient?: boolean;
+  /**
+   * The role of whoever is LOOKING at this page, which on a client's page is not `userRole` —
+   * that one describes the client. Disconnecting a client's accounts is admin-only, matching
+   * /api/client/connections, so the buttons do not appear for staff who could not use them.
+   */
+  viewerRole?: "admin" | "staff" | null;
 }
+
+/** What an admin is removing, and what to call it in the confirmation. */
+type ClientDisconnect = {
+  kind: "google" | "platform" | "mailbox";
+  value: string;
+  label: string;
+  /** What the client loses, said plainly in the dialog. */
+  consequence: string;
+};
 
 type GmailAccountConnection = {
   email: string;
@@ -131,7 +147,7 @@ const SettingsCard: React.FC<{
 );
 
 /** Only what this card shows; the billing page reads the rest from the same endpoint. */
-const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null, readOnly = false, billingCompanyId = null, canManageClient = false, onSettingsUpdate }) => {
+const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null, readOnly = false, billingCompanyId = null, canManageClient = false, viewerRole = null, onSettingsUpdate }) => {
   /** Whether the settings controls (not the identity ones) accept input on this page. */
   const settingsEditable = !readOnly || (canManageClient && !!billingCompanyId);
   const [name, setName] = useState(user.name || "");
@@ -174,6 +190,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const [showDeleteGmailModal, setShowDeleteGmailModal] = useState(false);
   const [gmailToDelete, setGmailToDelete] = useState<string | null>(null);
   const [isDeletingGmail, setIsDeletingGmail] = useState(false);
+  /** The client connection an admin has asked to remove, held while the confirm dialog is up. */
+  const [clientDisconnect, setClientDisconnect] = useState<ClientDisconnect | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [detectedCalendarAccounts, setDetectedCalendarAccounts] = useState<DetectedCalendarAccount[]>([]);
   const [calendarSettingsLoading, setCalendarSettingsLoading] = useState(false);
   const [calendarToggleKeyLoading, setCalendarToggleKeyLoading] = useState<string | null>(null);
@@ -500,6 +519,56 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  /** Re-read the client's connections after one is removed, so the cards match the database. */
+  const reloadClientConnections = async () => {
+    if (!billingCompanyId) return;
+    try {
+      const response = await fetch(
+        `/api/client/settings?companyId=${encodeURIComponent(billingCompanyId)}`
+      );
+      if (!response.ok) return;
+      const { connections } = await response.json();
+      setClientConnections((connections as ClientConnections | undefined) ?? null);
+    } catch (error) {
+      console.error("Failed to reload client connections:", error);
+    }
+  };
+
+  /**
+   * Remove one of the client's connected accounts.
+   *
+   * Never /api/gmail/delete or the social routes: those are scoped to the signed-in user, so on
+   * this page they would revoke the STAFF member's grant. /api/client/connections is scoped to
+   * the client being looked at.
+   */
+  const confirmClientDisconnect = async () => {
+    if (!clientDisconnect || !billingCompanyId || isDisconnecting) return;
+    setIsDisconnecting(true);
+    setUpdateMessage(null);
+    try {
+      const response = await fetch(
+        `/api/client/connections?companyId=${encodeURIComponent(billingCompanyId)}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: clientDisconnect.kind, value: clientDisconnect.value }),
+        }
+      );
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.message || "Could not disconnect that account.");
+      setUpdateMessage({ type: "success", text: `${clientDisconnect.label} disconnected.` });
+      setClientDisconnect(null);
+      await reloadClientConnections();
+    } catch (error) {
+      setUpdateMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Could not disconnect that account.",
+      });
+    } finally {
+      setIsDisconnecting(false);
     }
   };
 
@@ -839,9 +908,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const cardBg = isDark ? "bg-[#2E0A4F]/90 border-white/10" : "bg-[#F1EFF6] border-transparent";
   const textPrimary = isDark ? "text-white" : "text-[#111827]";
   const textSecondary = isDark ? "text-white/70" : "text-[#6B7280]";
-  const inputBg = isDark ? "bg-white/10 border-white/20 text-white placeholder-white/50" : "bg-white border-[#E5E7EB]";
   const pageBg = isDark ? "bg-transparent" : "bg-white";
   // Google accounts belong to whoever is signed in, so they are never part of someone else's page.
+  // Removing a client's grants is admin-only on the server; showing the control to staff would
+  // only produce a 403 they cannot act on.
+  const canManageClientConnections = readOnly && canManageClient && !!billingCompanyId && viewerRole === "admin";
   const canManageGmailAccounts = !readOnly && ["user", "admin", "staff"].includes(userRole || "");
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
   // The email panel's settings render on a dark card, where the light tint disappears entirely.
@@ -1107,38 +1178,40 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           <div className="space-y-4">
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Theme</label>
-              <span className="relative block"><select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
+              <PanelCombobox
+                aria-label="Theme"
+                tone={isDark ? "dark" : "panel"}
                 value={settings.theme}
-                onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
+                onChange={(value) => handleSettingsUpdate({ theme: value })}
                 disabled={!settingsEditable || isUpdating || isLoadingSettings}
-              >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="auto">System</option>
-              </select><FiChevronDown className={`pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 ${textSecondary}`} aria-hidden />
-            </span>
+                options={[
+                  { value: "light", label: "Light" },
+                  { value: "dark", label: "Dark" },
+                  { value: "auto", label: "System" },
+                ]}
+              />
             </div>
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Language</label>
-              <span className="relative block"><select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
+              <PanelCombobox
+                aria-label="Language"
+                tone={isDark ? "dark" : "panel"}
                 value={settings.language}
-                onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
+                onChange={(value) => handleSettingsUpdate({ language: value })}
                 disabled={!settingsEditable || isUpdating || isLoadingSettings}
-              >
-                <option value="en">English</option>
-                <option value="es">Spanish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="it">Italian</option>
-                <option value="pt">Portuguese</option>
-                <option value="ru">Russian</option>
-                <option value="zh">Chinese</option>
-                <option value="ja">Japanese</option>
-                <option value="ko">Korean</option>
-              </select><FiChevronDown className={`pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 ${textSecondary}`} aria-hidden />
-            </span>
+                options={[
+                  { value: "en", label: "English" },
+                  { value: "es", label: "Spanish" },
+                  { value: "fr", label: "French" },
+                  { value: "de", label: "German" },
+                  { value: "it", label: "Italian" },
+                  { value: "pt", label: "Portuguese" },
+                  { value: "ru", label: "Russian" },
+                  { value: "zh", label: "Chinese" },
+                  { value: "ja", label: "Japanese" },
+                  { value: "ko", label: "Korean" },
+                ]}
+              />
             </div>
           </div>
           )}
@@ -1155,8 +1228,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                is scoped to the client. */
             /* Same SettingsCard chrome, heading and account rows as the Google Accounts card on
                your own settings page, so the two read as one design rather than two. What differs
-               is only what a staff member may do: no "Add account", no Reconnect, no Remove —
-               those are OAuth grants only the account holder can make. */
+               is what may be done: an admin can DISCONNECT any of these, which is the half of
+               account management that does not need the account holder present. Connecting and
+               reconnecting still cannot appear here — both mean signing in as that account — so
+               the card says whose job that is rather than offering a button that cannot work. */
             <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
               {/* Three boxes rather than one, on the same band as Profile / Security /
                   Preferences above. Mailboxes and the other platforms were sections inside the
@@ -1180,8 +1255,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 ) : (
                   <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
                     {clientConnections.google.map((account) => (
-                      <div key={account.email} className="py-3 first:pt-0 last:pb-0">
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                      <div key={account.email} className="flex items-center gap-2 py-3 first:pt-0 last:pb-0">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
                           <span className={`truncate text-[13px] font-medium ${textPrimary}`}>
                             {account.email}
                           </span>
@@ -1195,9 +1270,38 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                             {account.needsReconnect ? "Needs reconnect" : "Connected"}
                           </span>
                         </div>
+                        {canManageClientConnections && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setClientDisconnect({
+                                kind: "google",
+                                value: account.email,
+                                label: account.email,
+                                consequence:
+                                  "Gmail and Calendar for this address stop working until the client signs in to Google again.",
+                              })
+                            }
+                            className={`shrink-0 rounded-lg p-1.5 transition-colors ${
+                              isDark
+                                ? "text-white/60 hover:bg-red-500/15 hover:text-red-300"
+                                : "text-[#6B7280] hover:bg-red-50 hover:text-red-600"
+                            }`}
+                            aria-label={`Disconnect ${account.email}`}
+                            title="Disconnect"
+                          >
+                            <FiTrash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
+                )}
+                {canManageClientConnections && (
+                  <p className={`mt-3 text-[11.5px] ${textSecondary}`}>
+                    Connecting is the client&apos;s own step — a Google grant is made by signing in
+                    as that account.
+                  </p>
                 )}
               </SettingsCard>
 
@@ -1218,9 +1322,34 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 ) : (
                   <ul className="space-y-1.5">
                     {clientConnections.mailboxes.map((mailbox) => (
-                      <li key={mailbox.email} className={`truncate text-[13px] ${textPrimary}`}>
-                        {mailbox.email}
-                        {mailbox.label ? <span className={textSecondary}> · {mailbox.label}</span> : null}
+                      <li key={mailbox.email} className="flex items-center gap-2">
+                        <span className={`min-w-0 flex-1 truncate text-[13px] ${textPrimary}`}>
+                          {mailbox.email}
+                          {mailbox.label ? <span className={textSecondary}> · {mailbox.label}</span> : null}
+                        </span>
+                        {canManageClientConnections && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setClientDisconnect({
+                                kind: "mailbox",
+                                value: mailbox.email,
+                                label: mailbox.email,
+                                consequence:
+                                  "This mailbox is detached from the workspace, and the email panel stops sending or receiving through it.",
+                              })
+                            }
+                            className={`shrink-0 rounded-lg p-1.5 transition-colors ${
+                              isDark
+                                ? "text-white/60 hover:bg-red-500/15 hover:text-red-300"
+                                : "text-[#6B7280] hover:bg-red-50 hover:text-red-600"
+                            }`}
+                            aria-label={`Detach ${mailbox.email}`}
+                            title="Detach"
+                          >
+                            <FiTrash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -1242,18 +1371,42 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 ) : (
                   <ul className="space-y-2">
                     {([
-                      ["LinkedIn", clientConnections.linkedin],
-                      ["Facebook", clientConnections.facebook],
-                      ["Google Ads", clientConnections.googleads],
-                    ] as const).map(([label, connected]) => (
+                      ["linkedin", "LinkedIn", clientConnections.linkedin],
+                      ["facebook", "Facebook", clientConnections.facebook],
+                      ["googleads", "Google Ads", clientConnections.googleads],
+                    ] as const).map(([key, label, connected]) => (
                       <li key={label} className={`flex items-center justify-between gap-2 text-[13px] ${textPrimary}`}>
                         <span>{label}</span>
-                        <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                            connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#F3F1F8] text-[#5B5468]"
-                          }`}
-                        >
-                          {connected ? "Connected" : "Not connected"}
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#F3F1F8] text-[#5B5468]"
+                            }`}
+                          >
+                            {connected ? "Connected" : "Not connected"}
+                          </span>
+                          {canManageClientConnections && connected && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setClientDisconnect({
+                                  kind: "platform",
+                                  value: key,
+                                  label,
+                                  consequence: `Campaigns that post or report through ${label} stop until the client connects it again.`,
+                                })
+                              }
+                              className={`rounded-lg p-1.5 transition-colors ${
+                                isDark
+                                  ? "text-white/60 hover:bg-red-500/15 hover:text-red-300"
+                                  : "text-[#6B7280] hover:bg-red-50 hover:text-red-600"
+                              }`}
+                              aria-label={`Disconnect ${label}`}
+                              title="Disconnect"
+                            >
+                              <FiTrash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </span>
                       </li>
                     ))}
@@ -1724,6 +1877,25 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           confirmLabel={isDeletingGmail ? "Removing..." : "Remove Account"}
           onConfirm={handleDeleteGmailAccount}
           onCancel={closeDeleteGmailModal}
+        />
+      )}
+
+      {clientDisconnect && (
+        <ConfirmActionModal
+          isOpen
+          title="Disconnect Account"
+          message={
+            <>
+              Disconnect{" "}
+              <span className="font-semibold text-[#111827]">{clientDisconnect.label}</span> from
+              this client? {clientDisconnect.consequence}
+            </>
+          }
+          confirmLabel={isDisconnecting ? "Disconnecting..." : "Disconnect"}
+          onConfirm={confirmClientDisconnect}
+          onCancel={() => {
+            if (!isDisconnecting) setClientDisconnect(null);
+          }}
         />
       )}
     </div>
