@@ -4679,7 +4679,7 @@ ${sourceText}`;
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
                     </div>
-                  ) : activeModule === "cryptography" ? (
+                  ) : activeModule === "cartography" ? (
                     <div className="h-full overflow-y-auto">
                       <CartographyView />
                     </div>

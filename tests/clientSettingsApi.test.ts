@@ -36,7 +36,7 @@ const STAFF = {
   user: { id: "staff1", email: "staff@vierradev.com", role: "admin", name: null },
   companyId: "vierra",
 };
-const CLIENT = { kind: "client", clientId: "cl1", companyId: "co1", user: { id: "cu1" } };
+const CLIENT = { kind: "client", clientId: "cl1", companyId: "11111111-1111-4111-8111-111111111111", user: { id: "cu1" } };
 
 const ROW = {
   user_id: "cu1",
@@ -95,14 +95,14 @@ describe("method and access", () => {
 
   it("refuses a session with no company at all", async () => {
     requireSessionMock.mockResolvedValue({ kind: "unaffiliated", user: { id: "x" } });
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.statusCode).toBe(403);
     expect(clientFindMany).not.toHaveBeenCalled();
   });
 
   it("stops when requireSession already answered", async () => {
     requireSessionMock.mockResolvedValue(null);
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.statusCode).toBe(0);
     expect(clientFindMany).not.toHaveBeenCalled();
   });
@@ -119,15 +119,15 @@ describe("method and access", () => {
   it("404s a company with no client rather than inventing defaults", async () => {
     clientFindMany.mockResolvedValue([]);
     clientFindFirst.mockResolvedValue(null);
-    const res = await call({ query: { companyId: "co-empty" } });
+    const res = await call({ query: { companyId: "22222222-2222-4222-8222-222222222222" } });
     expect(res.statusCode).toBe(404);
   });
 });
 
 describe("which row is read", () => {
   it("scopes a staff read to the named company", async () => {
-    await call({ query: { companyId: "co1" } });
-    expect(clientFindMany.mock.calls[0][0].where).toEqual({ company_id: "co1" });
+    await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
+    expect(clientFindMany.mock.calls[0][0].where).toEqual({ company_id: "11111111-1111-4111-8111-111111111111" });
   });
 
   it("ignores a companyId a representative sends and reads their own row", async () => {
@@ -144,7 +144,7 @@ describe("the settings it returns", () => {
   it("returns the client's stored values, not defaults", async () => {
     // The four columns exist on `clients` and had never been read by anything; the whole point is
     // that these are the client's, so a stored non-default must survive the round trip.
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({
       language: "fr",
@@ -157,7 +157,7 @@ describe("the settings it returns", () => {
   it("uses the same field names as the profile settings endpoint", async () => {
     // The page merges whichever it fetched into one state object; a second shape would need a
     // second branch in the component.
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     for (const key of ["emailNotifications", "twoFactorEnabled", "theme", "language"]) {
       expect(res.body, key).toHaveProperty(key);
     }
@@ -166,7 +166,7 @@ describe("the settings it returns", () => {
 
 describe("connections", () => {
   it("reads the client's tokens, not the caller's", async () => {
-    await call({ query: { companyId: "co1" } });
+    await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(tokenFindMany.mock.calls[0][0].where).toEqual({ user_id: "cu1" });
     expect(tokenFindMany.mock.calls[0][0].where).not.toMatchObject({ user_id: "staff1" });
   });
@@ -180,7 +180,7 @@ describe("connections", () => {
         meta: null,
       },
     ]);
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.body.connections.google).toEqual([
       { email: "sam@acme.co", expiresAt: "2026-07-01T00:00:00.000Z", needsReconnect: false },
     ]);
@@ -194,7 +194,7 @@ describe("connections", () => {
       { platform: "gmail:c@d.co", refresh_token: "r", expires_at: null, meta: { needsReconnect: true } },
       { platform: "gmail:e@f.co", refresh_token: "r", expires_at: null, meta: {} },
     ]);
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.body.connections.google.map((g: { needsReconnect: boolean }) => g.needsReconnect)).toEqual([
       true,
       true,
@@ -207,7 +207,7 @@ describe("connections", () => {
       { platform: "linkedin", refresh_token: "r", expires_at: null, meta: null },
       { platform: "googleads", refresh_token: "r", expires_at: null, meta: null },
     ]);
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.body.connections).toMatchObject({
       linkedin: true,
       googleads: true,
@@ -219,7 +219,7 @@ describe("connections", () => {
     tokenFindMany.mockResolvedValue([
       { platform: "gmail:a@b.co", refresh_token: "r", expires_at: null, meta: null },
     ]);
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.body.connections.linkedin).toBe(false);
     expect(res.body.connections.google).toHaveLength(1);
   });
@@ -229,8 +229,8 @@ describe("connections", () => {
       { account_email: "team@acme.co", provider_label: "Sales" },
       { account_email: "hi@acme.co", provider_label: null },
     ]);
-    const res = await call({ query: { companyId: "co1" } });
-    expect(mailboxFindMany.mock.calls[0][0].where).toEqual({ company_id: "co1" });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
+    expect(mailboxFindMany.mock.calls[0][0].where).toEqual({ company_id: "11111111-1111-4111-8111-111111111111" });
     expect(res.body.connections.mailboxes).toEqual([
       { email: "team@acme.co", label: "Sales" },
       { email: "hi@acme.co", label: null },
@@ -239,7 +239,7 @@ describe("connections", () => {
 
   it("returns empty connections for a client with no linked user, without querying tokens", async () => {
     clientFindFirst.mockResolvedValue({ ...ROW, user_id: null });
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(tokenFindMany).not.toHaveBeenCalled();
     expect(res.body.connections.google).toEqual([]);
     expect(res.body.connections.linkedin).toBe(false);
@@ -249,7 +249,7 @@ describe("connections", () => {
     // gcalvis: rows are visibility preferences written only when someone toggles a calendar, so
     // their absence means "never chose", not "no calendars". Counting them would state a fact
     // the data does not contain.
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(JSON.stringify(res.body)).not.toContain("calendarCount");
     expect(JSON.stringify(res.body)).not.toContain("gcalvis");
   });
@@ -259,14 +259,14 @@ describe("failure", () => {
   it("500s rather than throwing out of the handler", async () => {
     clientFindMany.mockRejectedValue(new Error("db down"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    const res = await call({ query: { companyId: "co1" } });
+    const res = await call({ query: { companyId: "11111111-1111-4111-8111-111111111111" } });
     expect(res.statusCode).toBe(500);
     err.mockRestore();
   });
 });
 
 describe("PUT — a staff member changing a client's settings", () => {
-  const put = (body: unknown, query: Record<string, string> = { companyId: "co1" }) =>
+  const put = (body: unknown, query: Record<string, string> = { companyId: "11111111-1111-4111-8111-111111111111" }) =>
     call({ method: "PUT", query, body });
 
   it("writes the change to that client's row", async () => {
@@ -275,7 +275,7 @@ describe("PUT — a staff member changing a client's settings", () => {
     clientFindMany.mockResolvedValue([{ id: "cl-real", name: "A", user_id: null, client_billing: null }]);
     const res = await put({ theme: "light" });
     expect(res.statusCode).toBe(200);
-    expect(clientFindMany.mock.calls[0][0].where).toEqual({ company_id: "co1" });
+    expect(clientFindMany.mock.calls[0][0].where).toEqual({ company_id: "11111111-1111-4111-8111-111111111111" });
     expect(clientUpdate.mock.calls[0][0].where).toEqual({ id: "cl-real" });
   });
 

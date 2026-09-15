@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 import { resolveBillingClient } from "@/lib/api/billingClient";
 
 /** Only these four columns may be written, and only with a value of the right shape. */
@@ -90,8 +90,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const companyId =
-    session.kind === "client" ? session.companyId : resolveTargetCompanyId(session, req);
+  // resolveTargetCompanyId falls back to Vierra's own company when a staff member names none
+  // (see lib/api/targetCompany.ts) — fine for tools like Cartography that work Vierra's own
+  // pipeline too, but this route reads/writes exactly one client row, so a staff member who
+  // hasn't picked one must be told to, not silently land on Vierra's row.
+  const companyId = hasExplicitTargetCompanyId(session, req) ? resolveTargetCompanyId(session, req) : null;
   if (!companyId) return res.status(400).json({ message: "companyId is required" });
 
   if (req.method === "PUT") {

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireSession } from "@/lib/auth";
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 import { resolveBillingClient } from "@/lib/api/billingClient";
 
 /**
@@ -100,8 +100,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(503).json({ message: "Billing is not configured." });
   }
 
-  const companyId =
-    session.kind === "client" ? session.companyId : resolveTargetCompanyId(session, req);
+  // resolveTargetCompanyId falls back to Vierra's own company when a staff member names none
+  // (see lib/api/targetCompany.ts). This route edits exactly one client's billing, so a staff
+  // member who hasn't picked a client must be told to, not silently land on Vierra's row.
+  const companyId = hasExplicitTargetCompanyId(session, req) ? resolveTargetCompanyId(session, req) : null;
   if (!companyId) return res.status(400).json({ message: "companyId is required" });
 
   const patch = readPatch(req.body);
