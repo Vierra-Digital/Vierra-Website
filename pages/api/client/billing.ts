@@ -74,17 +74,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       stripe.charges.list({ customer: customerId, limit: 100 }).autoPagingToArray({ limit: 500 }),
     ]);
 
-    const defaultMethodId =
-      !("deleted" in customer && customer.deleted) &&
-      typeof customer.invoice_settings?.default_payment_method === "string"
-        ? customer.invoice_settings.default_payment_method
-        : null;
-
     // The newest subscription that is still live, else the newest of any status.
     const subscription =
       subscriptions.data.find((s) => s.status === "active" || s.status === "trialing") ??
       subscriptions.data[0] ??
       null;
+
+    /**
+     * The customer's own invoice_settings.default_payment_method is the usual place this lives,
+     * but a subscription created directly with `default_payment_method` (rather than going through
+     * a Checkout Session that also sets the customer-level default) only sets it there — verified
+     * against a real test client whose customer-level default was null while its active
+     * subscription's default_payment_method was correctly set and being charged every renewal.
+     * Falling back to the subscription's own default keeps the "Default" badge honest for that
+     * case instead of never showing one despite billing working correctly underneath.
+     */
+    const subscriptionDefaultPaymentMethodId =
+      typeof subscription?.default_payment_method === "string"
+        ? subscription.default_payment_method
+        : subscription?.default_payment_method?.id ?? null;
+    const defaultMethodId =
+      (!("deleted" in customer && customer.deleted) &&
+      typeof customer.invoice_settings?.default_payment_method === "string"
+        ? customer.invoice_settings.default_payment_method
+        : null) ?? subscriptionDefaultPaymentMethodId;
     // Stripe moved the period boundary onto the subscription item; older versions keep it on the
     // subscription itself, so both are read rather than assuming which one this account returns.
     const periodEnd =

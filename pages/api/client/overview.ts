@@ -55,9 +55,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
         }),
         prisma.campaignContact.count({ where: campaignScope }),
-        prisma.financeEntry.aggregate({
-          where: { company_id: companyId, kind: "revenue" },
-          _sum: { amount_cents: true },
+        // Revenue is synced from Stripe onto stripe_invoices (see pages/api/stripe/webhook.ts),
+        // not finance_entries — its "revenue" kind was never written by anything, so this figure
+        // read a permanently-empty column before.
+        prisma.stripeInvoice.aggregate({
+          where: { company_id: companyId, status: "paid" },
+          _sum: { amount_paid_cents: true },
         }),
       ]);
 
@@ -67,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           activeCampaigns: campaigns.filter((c) => c.status === "active" || c.status === "running")
             .length,
           leads: leadCount,
-          billedCents: revenue._sum.amount_cents ?? 0,
+          billedCents: revenue._sum.amount_paid_cents ?? 0,
         },
         campaigns: campaigns.map((c) => ({
           id: c.id,

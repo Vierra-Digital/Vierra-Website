@@ -72,13 +72,22 @@ export default withAuth(async (req, res, session) => {
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)
 
-    // Money is stored in integer cents on finance_entries; sum per kind per month window.
-    const sumFinance = async (kind: "revenue" | "expense", start: Date, end: Date) => {
+    // Expenses are hand-kept on finance_entries; revenue is synced from Stripe onto
+    // stripe_invoices (see pages/api/stripe/webhook.ts) — finance_entries' own "revenue" kind
+    // was never written by anything, so this tile read a permanently-empty column before.
+    const sumExpense = async (start: Date, end: Date) => {
       const agg = await prisma.financeEntry.aggregate({
-        where: { ...scope, kind, occurred_at: { gte: start, lt: end } },
+        where: { ...scope, kind: "expense", occurred_at: { gte: start, lt: end } },
         _sum: { amount_cents: true },
       })
       return (agg._sum.amount_cents ?? 0) / 100
+    }
+    const sumRevenue = async (start: Date, end: Date) => {
+      const agg = await prisma.stripeInvoice.aggregate({
+        where: { ...scope, status: "paid", created_at: { gte: start, lt: end } },
+        _sum: { amount_paid_cents: true },
+      })
+      return (agg._sum.amount_paid_cents ?? 0) / 100
     }
 
     const [
@@ -158,10 +167,10 @@ export default withAuth(async (req, res, session) => {
           },
         },
       }),
-      sumFinance("revenue", currentMonthStart, currentMonthEnd),
-      sumFinance("revenue", previousMonthStart, previousMonthEnd),
-      sumFinance("expense", currentMonthStart, currentMonthEnd),
-      sumFinance("expense", previousMonthStart, previousMonthEnd),
+      sumRevenue(currentMonthStart, currentMonthEnd),
+      sumRevenue(previousMonthStart, previousMonthEnd),
+      sumExpense(currentMonthStart, currentMonthEnd),
+      sumExpense(previousMonthStart, previousMonthEnd),
     ])
 
     const profitThisMonth = revenueThisMonth - expensesThisMonth

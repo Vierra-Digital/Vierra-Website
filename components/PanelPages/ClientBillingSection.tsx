@@ -20,6 +20,7 @@ import { billingRows, hasBillingDetails, type BillingDetails } from "@/lib/billi
 import { summariseBilling } from "@/lib/billing/summary"
 import { invoiceDueDate } from "@/lib/billing/dueDate"
 import EditBillingDetailsModal from "@/components/panel/EditBillingDetailsModal"
+import Modal from "@/components/ui/Modal"
 
 type PaymentMethod = {
     id: string
@@ -154,13 +155,19 @@ type ClientBillingSectionProps = {
     companyId?: string | null
     /** Representatives can open the Stripe portal; staff read only. */
     canManage?: boolean
+    /** Admin staff can change what a client is billed; regular staff and clients cannot. */
+    canChangePlan?: boolean
 }
 
-const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId = null, canManage = false }) => {
+const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId = null, canManage = false, canChangePlan = false }) => {
     const [openingPortal, setOpeningPortal] = useState(false)
     const [portalError, setPortalError] = useState("")
     const [renewalBusy, setRenewalBusy] = useState(false)
     const [editingDetails, setEditingDetails] = useState(false)
+    const [changingPlan, setChangingPlan] = useState(false)
+    const [planAmount, setPlanAmount] = useState("")
+    const [planBusy, setPlanBusy] = useState(false)
+    const [planError, setPlanError] = useState("")
 
     const fetcher = useCallback(async () => {
         const url = companyId
@@ -219,6 +226,40 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
         }
     }
 
+    const openChangePlan = () => {
+        setPlanError("")
+        setPlanAmount(data?.retainerCents != null ? (data.retainerCents / 100).toString() : "")
+        setChangingPlan(true)
+    }
+
+    const submitPlanChange = async () => {
+        const dollars = Number(planAmount)
+        if (!Number.isFinite(dollars) || dollars <= 0) {
+            setPlanError("Enter an amount greater than $0.")
+            return
+        }
+        setPlanBusy(true)
+        setPlanError("")
+        try {
+            const url = companyId
+                ? `/api/client/billing-plan?companyId=${encodeURIComponent(companyId)}`
+                : "/api/client/billing-plan"
+            const response = await fetch(url, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ newRetainerCents: Math.round(dollars * 100) }),
+            })
+            const body = await response.json().catch(() => ({}))
+            if (!response.ok) throw new Error(body?.message || "Could not update the plan.")
+            setChangingPlan(false)
+            await run()
+        } catch (e) {
+            setPlanError(e instanceof Error ? e.message : "Could not update the plan.")
+        } finally {
+            setPlanBusy(false)
+        }
+    }
+
     // See lib/billing/summary for which Stripe rows each figure counts, and why.
     const { paidCents, refundedCents, outstandingCents, openInvoiceCount } = summariseBilling(
         data?.invoices ?? [],
@@ -271,7 +312,19 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                             <PanelStat
                                 label="Retainer"
                                 value={data.retainerCents === null ? "—" : money(data.retainerCents)}
-                                hint={data.subscription?.interval ? `Per ${titleCase(data.subscription.interval)}` : undefined}
+                                hint={
+                                    canChangePlan ? (
+                                        <button
+                                            type="button"
+                                            onClick={openChangePlan}
+                                            className="rounded font-medium text-[#701CC0] hover:underline"
+                                        >
+                                            Change Plan
+                                        </button>
+                                    ) : data.subscription?.interval ? (
+                                        `Per ${titleCase(data.subscription.interval)}`
+                                    ) : undefined
+                                }
                             />
                             <PanelStat
                                 label="Renews"
@@ -568,6 +621,56 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                         await run()
                     }}
                 />
+            )}
+
+            {changingPlan && (
+                <Modal
+                    onClose={() => !planBusy && setChangingPlan(false)}
+                    closeOnBackdrop={!planBusy}
+                    closeOnEscape={!planBusy}
+                    label="Change plan"
+                    cardClassName="w-full max-w-sm rounded-2xl bg-white p-5 text-[#111827] shadow-xl"
+                >
+                    <h3 className="text-[15px] font-semibold text-[#111827]">Change Plan</h3>
+                    <p className="mt-1 text-[13px] text-[#6B7280]">
+                        Takes effect at the client&apos;s next renewal — this billing period is unchanged. The client
+                        is emailed about the change.
+                    </p>
+                    <label className="mt-4 block text-[12px] font-medium text-[#374151]">
+                        New monthly retainer
+                        <div className="mt-1 flex items-center rounded-lg border border-[#D8D2E4] px-3">
+                            <span className="text-[13px] text-[#6B7280]">$</span>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={planAmount}
+                                onChange={(e) => setPlanAmount(e.target.value)}
+                                className="h-9 w-full border-0 bg-transparent px-2 text-[13px] text-[#111827] outline-none"
+                                autoFocus
+                            />
+                        </div>
+                    </label>
+                    {planError && <p role="alert" className="mt-2 text-[12px] text-[#B42318]">{planError}</p>}
+                    <div className="mt-4 flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setChangingPlan(false)}
+                            disabled={planBusy}
+                            className="h-9 rounded-[10px] border border-[#D8D2E4] px-3.5 text-[13px] font-medium text-[#374151] hover:bg-[#F5F3F9] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void submitPlanChange()}
+                            disabled={planBusy}
+                            className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {planBusy ? "Saving…" : "Save"}
+                        </button>
+                    </div>
+                </Modal>
             )}
         </div>
     )

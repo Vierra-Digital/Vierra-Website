@@ -5,10 +5,12 @@ import { requireRole } from "@/lib/auth";
 /**
  * The Finances page: the whole business, not one client.
  *
- * Reads the same `finance_entries` table the dashboard's Revenue, Expenses and Profit tiles read,
- * with the same month windows and the same growth arithmetic, so the two agree by construction
- * rather than by coincidence. The dashboard shows the current month for one company; this shows
- * every month of a year across all of them, plus what is contracted.
+ * Revenue comes from `stripe_invoices` (synced by the Stripe webhook's invoice.paid/
+ * invoice.payment_failed handlers — see pages/api/stripe/webhook.ts), not `finance_entries`.
+ * finance_entries' `kind: "revenue"` was meant to hold this, but nothing ever wrote one — every
+ * revenue figure across the app read a permanently-empty column. `finance_entries` now holds only
+ * expenses; the dashboard's Revenue tile and the client overview's `billedCents` read
+ * `stripe_invoices` the same way this page does, so all three agree by construction.
  *
  * Admin only. Staff run campaigns for clients; company-wide takings are not part of that job, and
  * the panel hides the page from them as well as this route refusing it.
@@ -45,16 +47,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
 
     /**
-     * One query for the year, bucketed here.
+     * One query per source for the year, bucketed here.
      *
-     * Twelve aggregates per kind would be twenty-four round trips for a page that is read often;
-     * a year of entries is small enough to bucket in memory.
+     * Twelve aggregates per kind would be many round trips for a page that is read often; a
+     * year's worth of rows is small enough to bucket in memory.
      */
-    const entries = await prisma.financeEntry.findMany({
-      where: { occurred_at: { gte: yearStart, lt: yearEnd } },
-      select: { kind: true, amount_cents: true, occurred_at: true, note: true, company_id: true, id: true },
-      orderBy: { occurred_at: "desc" },
-    });
+    const [entries, paidInvoices] = await Promise.all([
+      prisma.financeEntry.findMany({
+        where: { occurred_at: { gte: yearStart, lt: yearEnd }, kind: "expense" },
+        select: { kind: true, amount_cents: true, occurred_at: true, note: true, company_id: true, id: true },
+        orderBy: { occurred_at: "desc" },
+      }),
+      prisma.stripeInvoice.findMany({
+        where: { status: "paid", created_at: { gte: yearStart, lt: yearEnd } },
+        select: { amount_paid_cents: true, created_at: true },
+      }),
+    ]);
 
     const months: Month[] = Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
@@ -62,10 +70,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       expenseCents: 0,
       profitCents: 0,
     }));
+    for (const invoice of paidInvoices) {
+      months[invoice.created_at.getUTCMonth()].revenueCents += invoice.amount_paid_cents;
+    }
     for (const entry of entries) {
-      const bucket = months[entry.occurred_at.getUTCMonth()];
-      if (entry.kind === "revenue") bucket.revenueCents += entry.amount_cents;
-      else if (entry.kind === "expense") bucket.expenseCents += entry.amount_cents;
+      months[entry.occurred_at.getUTCMonth()].expenseCents += entry.amount_cents;
     }
     for (const bucket of months) bucket.profitCents = bucket.revenueCents - bucket.expenseCents;
 
@@ -117,35 +126,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const mrrCents = contracted.reduce((sum, c) => sum + c.retainerCents, 0);
 
     /**
-     * What Stripe actually collected, alongside what the ledger records.
+     * What Stripe collected, read from the synced ledger rather than a live Stripe call.
      *
-     * These are two different questions and the page shows both. finance_entries is the book the
-     * dashboard reads, kept by hand; Stripe is money that genuinely moved. Right now the ledger is
-     * empty while Stripe holds paid invoices, so a page showing only the ledger would be a grid of
-     * zeros next to a business that has taken payments.
-     *
-     * Best-effort: Stripe being unreachable leaves this null and the rest of the page stands.
+     * Same number as `months[].revenueCents` above — `collected` is kept as its own field so the
+     * panel UI's existing "Collected" tile needs no change, but there is no longer a second,
+     * independently-pulled figure that could disagree with the month breakdown.
      */
-    let collected: { totalCents: number; byMonth: number[] } | null = null;
-    if (process.env.STRIPE_SECRET_KEY) {
-      try {
-        const { stripe } = await import("@/lib/stripe");
-        const paid = await stripe.invoices
-          .list({
-            status: "paid",
-            created: { gte: Math.floor(yearStart.getTime() / 1000), lt: Math.floor(yearEnd.getTime() / 1000) },
-            limit: 100,
-          })
-          .autoPagingToArray({ limit: 1000 });
-        const byMonth = Array(12).fill(0);
-        for (const invoice of paid) {
-          byMonth[new Date(invoice.created * 1000).getUTCMonth()] += invoice.amount_paid;
-        }
-        collected = { totalCents: byMonth.reduce((a, b) => a + b, 0), byMonth };
-      } catch (stripeError) {
-        console.warn("finances/overview: Stripe unavailable, ledger only:", stripeError);
-      }
-    }
+    const collected = { totalCents: yearRevenue, byMonth: months.map((m) => m.revenueCents) };
 
     return res.status(200).json({
       year,

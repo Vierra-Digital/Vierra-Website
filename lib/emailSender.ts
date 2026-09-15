@@ -326,6 +326,40 @@ export async function sendInviteEmail(email: string, inviteLink: string): Promis
   }
 }
 
+/**
+ * Sent when an admin changes a client's monthly retainer (pages/api/client/billing-plan.ts).
+ * Stripe has no built-in "price changed" notification — only opt-in receipt/upcoming-renewal/
+ * failed-payment templates — so this is the only place the client hears about it. The change
+ * always takes effect at the next renewal, never prorated immediately; effectiveDate is that
+ * subscription's current period end, read from the same Stripe call that made the change.
+ */
+export async function sendPlanChangeEmail(
+  email: string,
+  { oldAmountCents, newAmountCents, effectiveDate }: { oldAmountCents: number; newAmountCents: number; effectiveDate: Date }
+): Promise<void> {
+  const money = (cents: number) => (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
+  const formattedDate = effectiveDate.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+  const mailOptions = {
+    from: fromAddress,
+    to: email,
+    subject: "Vierra | Your plan is changing",
+    html: renderEmailShell(`
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Your Plan Is Changing</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
+                Your monthly retainer is changing from ${money(oldAmountCents)} to ${money(newAmountCents)}. This takes effect on your next renewal, ${formattedDate} — nothing about your current billing period changes.
+              </p>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Questions about this change? Just reply to this email.<br/>- The Vierra Team</p>`),
+  };
+
+  try {
+    await deliver(mailOptions);
+    console.log(`Plan-change email sent to ${email}`);
+  } catch (error) {
+    console.error(`Error sending plan-change email to ${email}:`, error);
+    throw error;
+  }
+}
+
 export async function sendClientOnboardingCompletedEmail(
   clientEmail: string,
   clientName: string,

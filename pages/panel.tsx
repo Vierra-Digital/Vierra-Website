@@ -637,7 +637,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                         <ClientOverviewSection view="campaigns" companyId={viewClient?.companyId ?? null} />
                       )}
                       {viewModeSection === 6 && (
-                        <ClientBillingSection companyId={viewClient?.companyId ?? null} />
+                        <ClientBillingSection companyId={viewClient?.companyId ?? null} canChangePlan={isAdmin} />
                       )}
                       {/* The client's own settings page. canManageClient lets a staff member
                           change the client's settings — theme, language, notifications, two-factor
