@@ -97,6 +97,56 @@ describe("finances/overview: revenue from stripe_invoices", () => {
   });
 });
 
+describe("finances/overview: Ledger includes both revenue and expense rows", () => {
+  it("merges paid invoices and expense entries into one chronological ledger", async () => {
+    financeEntryFindMany.mockResolvedValue([
+      { id: "fe_1", kind: "expense", amount_cents: 20000, occurred_at: new Date("2026-03-10"), note: "AWS" },
+    ]);
+    stripeInvoiceFindMany.mockResolvedValue([
+      {
+        id: "in_1",
+        client_id: "client_1",
+        amount_paid_cents: 50000,
+        created_at: new Date("2026-03-15"),
+      },
+    ]);
+    clientFindManyMock.mockResolvedValue([{ id: "client_1", name: "Jane", business_name: "Acme Co" }]);
+
+    const { default: handler } = await import("@/pages/api/finances/overview");
+    const res = mockRes();
+    await handler({ method: "GET", query: { year: "2026" }, headers: {} } as never, res as never);
+
+    expect(res.body.entries).toHaveLength(2);
+    // Newest first: the invoice's created_at (3/15) is after the expense's occurred_at (3/10) —
+    // dated by created_at, the same field the month chart buckets by, not paid_at.
+    expect(res.body.entries[0]).toMatchObject({
+      id: "in_1",
+      kind: "revenue",
+      amountCents: 50000,
+      note: "Acme Co",
+    });
+    expect(res.body.entries[1]).toMatchObject({ id: "fe_1", kind: "expense", amountCents: 20000, note: "AWS" });
+  });
+
+  it("still names a revenue row for a client that is no longer active", async () => {
+    // The `clients` query used for the MRR/contracted list is filtered to is_active: true; the
+    // ledger's client-name lookup must not reuse it, or a churned client's past invoices would
+    // show no name.
+    stripeInvoiceFindMany.mockResolvedValue([
+      { id: "in_1", client_id: "client_churned", amount_paid_cents: 30000, created_at: new Date("2026-03-01") },
+    ]);
+    clientFindManyMock.mockImplementation(async ({ where }: { where?: { is_active?: boolean } }) =>
+      where?.is_active ? [] : [{ id: "client_churned", name: "Old Client", business_name: "Old Co" }]
+    );
+
+    const { default: handler } = await import("@/pages/api/finances/overview");
+    const res = mockRes();
+    await handler({ method: "GET", query: { year: "2026" }, headers: {} } as never, res as never);
+
+    expect(res.body.entries[0]).toMatchObject({ id: "in_1", note: "Old Co" });
+  });
+});
+
 describe("dashboard/stats: Revenue tile from stripe_invoices", () => {
   it("sums stripe_invoices for the revenue card, finance_entries for expenses only", async () => {
     const { default: handler } = await import("@/pages/api/dashboard/stats");

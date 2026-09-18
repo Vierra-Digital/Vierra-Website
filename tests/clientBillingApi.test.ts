@@ -103,3 +103,35 @@ it("shows no default when neither the customer nor the subscription names one", 
   const res = await call();
   expect(res.body.paymentMethods[0].isDefault).toBe(false);
 });
+
+/**
+ * Pins the fix: the subscription lookup used to be one `status: "all", limit: 10` list + a
+ * client-side find() for "active/trialing, else newest of any status" — a customer with more than
+ * 10 subscriptions (stale canceled ones from testing, manual dashboard changes) could have the
+ * true answer fall past that fixed page. It's now three status-filtered limit:1 calls instead.
+ */
+it("finds the active subscription via a status-filtered call, not a fixed-size page", async () => {
+  customersRetrieve.mockResolvedValue({ id: "cus_1", invoice_settings: { default_payment_method: null } });
+  const ACTIVE_SUB = { id: "sub_active", status: "active", default_payment_method: null, items: { data: [{ price: {} }] } };
+  subscriptionsList.mockImplementation(async ({ status }: { status?: string }) => ({
+    data: status === "active" ? [ACTIVE_SUB] : [],
+  }));
+
+  const res = await call();
+  expect(res.statusCode).toBe(200);
+  expect(res.body.subscription.id).toBe("sub_active");
+  expect(subscriptionsList).toHaveBeenCalledWith(expect.objectContaining({ status: "active", limit: 1 }));
+  expect(subscriptionsList).toHaveBeenCalledWith(expect.objectContaining({ status: "trialing", limit: 1 }));
+  expect(subscriptionsList).not.toHaveBeenCalledWith(expect.objectContaining({ status: "all" }));
+});
+
+it("falls back to the newest subscription of any status when none are active or trialing", async () => {
+  customersRetrieve.mockResolvedValue({ id: "cus_1", invoice_settings: { default_payment_method: null } });
+  const CANCELED_SUB = { id: "sub_old", status: "canceled", default_payment_method: null, items: { data: [{ price: {} }] } };
+  subscriptionsList.mockImplementation(async ({ status }: { status?: string }) => ({
+    data: status === "active" || status === "trialing" ? [] : [CANCELED_SUB],
+  }));
+
+  const res = await call();
+  expect(res.body.subscription.id).toBe("sub_old");
+});

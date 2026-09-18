@@ -42,15 +42,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { stripe } = await import("@/lib/stripe");
+    const { findActiveOrTrialingSubscription } = await import("@/lib/stripe/subscription");
+
     // Read the live subscription rather than trusting an id sent by the browser, which would let
     // a caller name any subscription in the account.
-    const subscriptions = await stripe.subscriptions.list({
-      customer: billing.stripe_customer_id,
-      status: "all",
-      limit: 10,
-    });
-    const subscription =
-      subscriptions.data.find((s) => s.status === "active" || s.status === "trialing") ?? null;
+    const subscription = await findActiveOrTrialingSubscription(stripe, billing.stripe_customer_id);
     if (!subscription) {
       return res.status(404).json({ message: "No active subscription to change." });
     }

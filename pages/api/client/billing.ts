@@ -56,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { stripe } = await import("@/lib/stripe");
+    const { findDisplaySubscription } = await import("@/lib/stripe/subscription");
     /**
      * Paged, not capped at one response.
      *
@@ -64,21 +65,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
      * shown. autoPagingToArray follows the cursor, with a ceiling so one very old account cannot
      * hold the request open indefinitely.
      */
-    const [customer, methods, subscriptions, invoices, charges] = await Promise.all([
+    const [customer, methods, subscription, invoices, charges] = await Promise.all([
       stripe.customers.retrieve(customerId),
       stripe.paymentMethods.list({ customer: customerId, limit: 20 }),
-      stripe.subscriptions.list({ customer: customerId, status: "all", limit: 10 }),
+      findDisplaySubscription(stripe, customerId),
       stripe.invoices
         .list({ customer: customerId, limit: 100 })
         .autoPagingToArray({ limit: 500 }),
       stripe.charges.list({ customer: customerId, limit: 100 }).autoPagingToArray({ limit: 500 }),
     ]);
-
-    // The newest subscription that is still live, else the newest of any status.
-    const subscription =
-      subscriptions.data.find((s) => s.status === "active" || s.status === "trialing") ??
-      subscriptions.data[0] ??
-      null;
 
     /**
      * The customer's own invoice_settings.default_payment_method is the usual place this lives,

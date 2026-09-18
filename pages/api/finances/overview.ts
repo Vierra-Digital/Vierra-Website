@@ -60,7 +60,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }),
       prisma.stripeInvoice.findMany({
         where: { status: "paid", created_at: { gte: yearStart, lt: yearEnd } },
-        select: { amount_paid_cents: true, created_at: true },
+        select: { id: true, client_id: true, amount_paid_cents: true, created_at: true },
+        orderBy: { created_at: "desc" },
       }),
     ]);
 
@@ -100,18 +101,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
      * read against — and it comes from our own table, not from Stripe, so the page does not depend
      * on a Stripe round trip to render.
      */
-    const clients = await prisma.client.findMany({
-      where: { is_active: true },
-      select: {
-        id: true,
-        name: true,
-        business_name: true,
-        client_billing: {
-          select: { monthly_retainer_cents: true, stripe_subscription_status: true, stripe_connected: true },
+    // The `clients` query below is filtered to is_active: true, so a churned client's past
+    // invoices would otherwise show no name in the ledger at all — invoiceClients is looked up
+    // directly by the invoices' own client_ids instead. Independent of `clients`, so run together.
+    const invoiceClientIds = [...new Set(paidInvoices.map((inv) => inv.client_id).filter((id): id is string => Boolean(id)))];
+    const [clients, invoiceClients] = await Promise.all([
+      prisma.client.findMany({
+        where: { is_active: true },
+        select: {
+          id: true,
+          name: true,
+          business_name: true,
+          client_billing: {
+            select: { monthly_retainer_cents: true, stripe_subscription_status: true, stripe_connected: true },
+          },
         },
-      },
-      orderBy: { name: "asc" },
-    });
+        orderBy: { name: "asc" },
+      }),
+      invoiceClientIds.length
+        ? prisma.client.findMany({
+            where: { id: { in: invoiceClientIds } },
+            select: { id: true, name: true, business_name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const invoiceClientName = new Map(invoiceClients.map((c) => [c.id, c.business_name || c.name]));
 
     const contracted = clients
       .map((c) => ({
@@ -133,6 +147,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
      * independently-pulled figure that could disagree with the month breakdown.
      */
     const collected = { totalCents: yearRevenue, byMonth: months.map((m) => m.revenueCents) };
+
+    /**
+     * The ledger merges both sources — expenses (finance_entries) and revenue (paid Stripe
+     * invoices) — into one chronological list. It used to be expenses only, which read as if the
+     * business only ever spent money; FinancesSection.tsx's table already renders a kind:
+     * "revenue" row correctly (positive-toned badge, no minus sign), nothing had ever sent it one.
+     */
+    const ledgerEntries = [
+      ...entries.map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        amountCents: e.amount_cents,
+        occurredAt: e.occurred_at,
+        note: e.note,
+      })),
+      ...paidInvoices.map((inv) => ({
+        id: inv.id,
+        kind: "revenue" as const,
+        amountCents: inv.amount_paid_cents,
+        // created_at, not paid_at: the month chart above buckets by created_at (and the query
+        // itself filters the year on it), so the ledger uses the same field an invoice is dated
+        // by everywhere else on this page — an invoice created in one month/year but paid in the
+        // next would otherwise be attributed to different periods by the chart and the ledger.
+        occurredAt: inv.created_at,
+        note: inv.client_id ? invoiceClientName.get(inv.client_id) ?? null : null,
+      })),
+    ]
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      .slice(0, 100);
 
     return res.status(200).json({
       year,
@@ -156,12 +199,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       mrrCents,
       activeClients: contracted.filter((c) => c.retainerCents > 0).length,
       contracted,
-      // The ledger, newest first, capped so one long year cannot make the page enormous.
-      entries: entries.slice(0, 100).map((e) => ({
+      // Newest first, capped so one long year cannot make the page enormous.
+      entries: ledgerEntries.map((e) => ({
         id: e.id,
         kind: e.kind,
-        amountCents: e.amount_cents,
-        occurredAt: e.occurred_at.toISOString(),
+        amountCents: e.amountCents,
+        occurredAt: e.occurredAt.toISOString(),
         note: e.note,
       })),
     });

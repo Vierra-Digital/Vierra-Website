@@ -13,6 +13,7 @@
  */
 import { stripe } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
+import { buildStripeInvoiceUpsert } from "@/lib/stripe/invoiceSync";
 
 async function run() {
   let seen = 0;
@@ -37,35 +38,9 @@ async function run() {
       continue;
     }
 
-    const subscriptionRef = invoice.parent?.subscription_details?.subscription;
-    const subscriptionId = typeof subscriptionRef === "string" ? subscriptionRef : subscriptionRef?.id ?? null;
-    const line = invoice.lines.data[0];
-
-    await prisma.stripeInvoice.upsert({
-      where: { id: invoice.id },
-      create: {
-        id: invoice.id,
-        client_id: billing.client_id,
-        company_id: billing.clients.company_id,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: subscriptionId,
-        status: invoice.status ?? "open",
-        amount_due_cents: invoice.amount_due,
-        amount_paid_cents: invoice.amount_paid,
-        currency: invoice.currency,
-        period_start: line?.period?.start ? new Date(line.period.start * 1000) : null,
-        period_end: line?.period?.end ? new Date(line.period.end * 1000) : null,
-        hosted_invoice_url: invoice.hosted_invoice_url ?? null,
-        created_at: new Date(invoice.created * 1000),
-        paid_at: invoice.status === "paid" ? new Date(invoice.created * 1000) : null,
-      },
-      update: {
-        status: invoice.status ?? "open",
-        amount_due_cents: invoice.amount_due,
-        amount_paid_cents: invoice.amount_paid,
-        hosted_invoice_url: invoice.hosted_invoice_url ?? null,
-      },
-    });
+    await prisma.stripeInvoice.upsert(
+      buildStripeInvoiceUpsert(invoice, { client_id: billing.client_id, company_id: billing.clients.company_id }, customerId)
+    );
     upserted += 1;
   }
 

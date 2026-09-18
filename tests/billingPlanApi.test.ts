@@ -82,15 +82,17 @@ beforeEach(() => {
   clientBillingUpdate.mockResolvedValue({});
   getRetainerProductIdMock.mockResolvedValue("prod_retainer");
   sendPlanChangeEmailMock.mockResolvedValue(undefined);
-  subscriptionsList.mockResolvedValue({
-    data: [
-      {
-        id: "sub_1",
-        status: "active",
-        items: { data: [{ id: "si_1", price: { unit_amount: 100000 }, current_period_end: 1700000000 }] },
-      },
-    ],
-  });
+  // Status-aware, matching the real handler's two status-filtered calls (see
+  // pages/api/client/billing-plan.ts) rather than one unconditional response for both — otherwise
+  // a test could pass by accident regardless of which status was actually queried.
+  const ACTIVE_SUB = {
+    id: "sub_1",
+    status: "active",
+    items: { data: [{ id: "si_1", price: { unit_amount: 100000 }, current_period_end: 1700000000 }] },
+  };
+  subscriptionsList.mockImplementation(async ({ status }: { status: string }) => ({
+    data: status === "active" ? [ACTIVE_SUB] : [],
+  }));
   subscriptionsUpdate.mockResolvedValue({
     id: "sub_1",
     items: { data: [{ current_period_end: 1702592000 }] },
@@ -209,9 +211,37 @@ describe("DB write fails after Stripe already changed", () => {
 
 describe("no active subscription", () => {
   it("404s rather than creating a subscription", async () => {
-    subscriptionsList.mockResolvedValue({ data: [{ id: "sub_old", status: "canceled", items: { data: [] } }] });
+    subscriptionsList.mockResolvedValue({ data: [] });
     const res = await call({ body: { newRetainerCents: 150000 } });
     expect(res.statusCode).toBe(404);
     expect(subscriptionsUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("more subscriptions than one page", () => {
+  it("still finds the active subscription instead of relying on a fixed-size list + client-side find", async () => {
+    // Pins the fix: previously a single `status: "all", limit: 10` call meant an account with more
+    // than 10 stale/canceled subscriptions could push the real active one past the page, 404ing as
+    // if there were none. Two status-filtered calls (status: "active", status: "trialing") can't
+    // miss it regardless of how many non-matching subscriptions exist on the customer.
+    const res = await call({ body: { newRetainerCents: 150000 } });
+    expect(res.statusCode).toBe(200);
+    expect(subscriptionsList).toHaveBeenCalledWith(expect.objectContaining({ status: "active", limit: 1 }));
+    expect(subscriptionsList).toHaveBeenCalledWith(expect.objectContaining({ status: "trialing", limit: 1 }));
+    expect(subscriptionsList).not.toHaveBeenCalledWith(expect.objectContaining({ status: "all" }));
+  });
+
+  it("falls back to a trialing subscription when there's no active one", async () => {
+    const TRIALING_SUB = {
+      id: "sub_trial",
+      status: "trialing",
+      items: { data: [{ id: "si_trial", price: { unit_amount: 100000 }, current_period_end: 1700000000 }] },
+    };
+    subscriptionsList.mockImplementation(async ({ status }: { status: string }) => ({
+      data: status === "trialing" ? [TRIALING_SUB] : [],
+    }));
+    const res = await call({ body: { newRetainerCents: 150000 } });
+    expect(res.statusCode).toBe(200);
+    expect(subscriptionsUpdate).toHaveBeenCalledWith("sub_trial", expect.anything());
   });
 });

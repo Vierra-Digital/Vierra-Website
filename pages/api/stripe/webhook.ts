@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { stripe } from "@/lib/stripe"
 import { prisma } from "@/lib/prisma"
+import { buildStripeInvoiceUpsert } from "@/lib/stripe/invoiceSync"
 import type Stripe from "stripe"
 
 export const config = {
@@ -99,38 +100,9 @@ async function saveInvoice(invoice: Stripe.Invoice) {
     return
   }
 
-  // Newer API versions moved this off the top-level invoice onto invoice.parent — see
-  // Stripe.Invoice.Parent.SubscriptionDetails.
-  const subscriptionRef = invoice.parent?.subscription_details?.subscription
-  const subscriptionId = typeof subscriptionRef === "string" ? subscriptionRef : subscriptionRef?.id ?? null
-  const line = invoice.lines.data[0]
-
-  await prisma.stripeInvoice.upsert({
-    where: { id: invoice.id },
-    create: {
-      id: invoice.id,
-      client_id: billing.client_id,
-      company_id: billing.clients.company_id,
-      stripe_customer_id: customerId,
-      stripe_subscription_id: subscriptionId,
-      status: invoice.status ?? "open",
-      amount_due_cents: invoice.amount_due,
-      amount_paid_cents: invoice.amount_paid,
-      currency: invoice.currency,
-      period_start: line?.period?.start ? new Date(line.period.start * 1000) : null,
-      period_end: line?.period?.end ? new Date(line.period.end * 1000) : null,
-      hosted_invoice_url: invoice.hosted_invoice_url ?? null,
-      created_at: new Date(invoice.created * 1000),
-      paid_at: invoice.status === "paid" ? new Date() : null,
-    },
-    update: {
-      status: invoice.status ?? "open",
-      amount_due_cents: invoice.amount_due,
-      amount_paid_cents: invoice.amount_paid,
-      hosted_invoice_url: invoice.hosted_invoice_url ?? null,
-      paid_at: invoice.status === "paid" ? new Date() : null,
-    },
-  })
+  await prisma.stripeInvoice.upsert(
+    buildStripeInvoiceUpsert(invoice, { client_id: billing.client_id, company_id: billing.clients.company_id }, customerId)
+  )
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -142,6 +114,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sig = req.headers["stripe-signature"]
   if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
     return res.status(400).json({ message: "Missing signature or webhook secret." })
+  }
+  // Checked explicitly, before anything touches the lazy `stripe` client (lib/stripe.ts) — without
+  // this, a missing/misconfigured STRIPE_SECRET_KEY throws from inside the try/catch just below and
+  // gets reported as a signature failure, which is the wrong diagnosis: Stripe eventually gives up
+  // retrying a 400 it reads as "bad delivery," silently dropping events, while whoever investigates
+  // sees "signature verification failed" instead of the real config problem.
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error("Stripe webhook: STRIPE_SECRET_KEY is not set")
+    return res.status(500).json({ message: "Stripe is not configured." })
   }
 
   let event: Stripe.Event

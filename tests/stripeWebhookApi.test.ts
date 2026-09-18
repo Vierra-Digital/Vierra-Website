@@ -88,6 +88,7 @@ const call = (event: unknown) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.STRIPE_SECRET_KEY = "sk_test";
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
   webhookEventCreate.mockResolvedValue({});
   webhookEventDelete.mockResolvedValue({});
@@ -143,6 +144,9 @@ describe("invoice sync", () => {
     hosted_invoice_url: "https://stripe.test/in_1",
     lines: { data: [{ period: { start: 1700000000, end: 1702592000 } }] },
     parent: { subscription_details: { subscription: "sub_1" } },
+    // Stripe's own record of when the invoice was actually paid — distinct from `created`, and
+    // from whenever this webhook happens to process the event (see the fix pinned below).
+    status_transitions: { paid_at: 1700003600 },
   };
 
   it("invoice.paid upserts a stripe_invoices row for the matching client", async () => {
@@ -160,6 +164,20 @@ describe("invoice sync", () => {
         }),
       })
     );
+  });
+
+  it("stamps paid_at from Stripe's status_transitions.paid_at, not wall-clock processing time", async () => {
+    await call({ id: "evt_paid_at", type: "invoice.paid", data: { object: invoice } });
+    const call1 = stripeInvoiceUpsert.mock.calls[0][0];
+    expect(call1.create.paid_at).toEqual(new Date(1700003600 * 1000));
+    expect(call1.update.paid_at).toEqual(new Date(1700003600 * 1000));
+  });
+
+  it("leaves paid_at null when Stripe hasn't recorded a paid transition (e.g. payment_failed)", async () => {
+    const unpaidInvoice = { ...invoice, status: "open", status_transitions: { paid_at: null } };
+    await call({ id: "evt_unpaid", type: "invoice.payment_failed", data: { object: unpaidInvoice } });
+    const call1 = stripeInvoiceUpsert.mock.calls[0][0];
+    expect(call1.create.paid_at).toBeNull();
   });
 
   it("skips rather than throws when no client_billing matches the customer", async () => {
@@ -212,6 +230,21 @@ describe("signature verification", () => {
     await handler(req as never, res as never);
     expect(res.statusCode).toBe(400);
     expect(webhookEventCreate).not.toHaveBeenCalled();
+    err.mockRestore();
+  });
+
+  it("500s with a distinct config error, not a signature failure, when STRIPE_SECRET_KEY is missing", async () => {
+    // Pins the fix: lib/stripe.ts's client is constructed lazily now, so a missing key used to
+    // throw from inside the signature-verification try/catch and get reported as "signature
+    // verification failed" — the wrong diagnosis, and one Stripe eventually stops retrying.
+    delete process.env.STRIPE_SECRET_KEY;
+    const req = mockReq("{}");
+    const res = mockRes();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    await handler(req as never, res as never);
+    expect(res.statusCode).toBe(500);
+    expect(res.body.message).toBe("Stripe is not configured.");
+    expect(constructEventMock).not.toHaveBeenCalled();
     err.mockRestore();
   });
 });
