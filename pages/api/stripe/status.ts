@@ -3,6 +3,7 @@ import { parseCookie } from "@/lib/api/cookies"
 import { prisma } from "@/lib/prisma"
 import { stripe } from "@/lib/stripe"
 import { handleApiError } from "@/lib/api/guards"
+import { findActiveOrTrialingSubscription } from "@/lib/stripe/subscription"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -74,6 +75,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (paymentMethods.data.length > 0) {
       const pm = paymentMethods.data[0]
+      // The checkout.session.completed webhook is what normally records the subscription id and
+      // status (pages/api/stripe/webhook.ts's saveSubscriptionFromCheckout) — this fallback only
+      // ran when that webhook was slow or missing, so without also looking the subscription up
+      // here, client_billing would flip stripe_connected but leave subscription_id/status null
+      // until some later subscription webhook happened to fire (if ever). The admin Finances page
+      // reads subscription_status straight off this column, so a client who paid could show up
+      // with no status at all.
+      const subscription = await findActiveOrTrialingSubscription(stripe, billing.stripe_customer_id!)
+
       await prisma.clientBilling.update({
         where: { client_id: session.clients.id },
         data: {
@@ -82,13 +92,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           stripe_card_brand: pm.card?.brand ?? null,
           stripe_card_last4: pm.card?.last4 ?? null,
           stripe_connected_at: new Date(),
+          ...(subscription && {
+            stripe_subscription_id: subscription.id,
+            stripe_subscription_status: subscription.status,
+          }),
         },
       })
 
       return res.status(200).json({
         connected: true,
-        subscriptionId: billing.stripe_subscription_id,
-        subscriptionStatus: billing.stripe_subscription_status,
+        subscriptionId: subscription?.id ?? billing.stripe_subscription_id,
+        subscriptionStatus: subscription?.status ?? billing.stripe_subscription_status,
         cardBrand: pm.card?.brand,
         cardLast4: pm.card?.last4,
       })

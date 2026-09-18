@@ -7,10 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * throwing (the fix this file pins).
  */
 
-const { onboardingSessionFindUnique, clientBillingUpdate, paymentMethodsList } = vi.hoisted(() => ({
+const { onboardingSessionFindUnique, clientBillingUpdate, paymentMethodsList, subscriptionsList } = vi.hoisted(() => ({
   onboardingSessionFindUnique: vi.fn(),
   clientBillingUpdate: vi.fn(),
   paymentMethodsList: vi.fn(),
+  subscriptionsList: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 vi.mock("@/lib/stripe", () => ({
-  stripe: { paymentMethods: { list: paymentMethodsList } },
+  stripe: { paymentMethods: { list: paymentMethodsList }, subscriptions: { list: subscriptionsList } },
 }));
 
 import handler from "@/pages/api/stripe/status";
@@ -52,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.STRIPE_SECRET_KEY = "sk_test";
   clientBillingUpdate.mockResolvedValue({});
+  subscriptionsList.mockResolvedValue({ data: [] });
 });
 
 describe("GET /api/stripe/status", () => {
@@ -127,13 +129,59 @@ describe("GET /api/stripe/status", () => {
       },
     });
     paymentMethodsList.mockResolvedValue({ data: [{ id: "pm_1", card: { brand: "mastercard", last4: "1234" } }] });
+    // The webhook that would normally record this (saveSubscriptionFromCheckout) is exactly what
+    // hasn't landed yet — the self-heal path must look the subscription up itself rather than
+    // leaving subscription_id/status null indefinitely.
+    subscriptionsList.mockImplementation(async ({ status }: { status: string }) => ({
+      data: status === "active" ? [{ id: "sub_1", status: "active" }] : [],
+    }));
     const res = mockRes();
     await handler(mockReq() as never, res as never);
     expect(paymentMethodsList).toHaveBeenCalledWith({ customer: "cus_1", type: "card", limit: 1 });
     expect(clientBillingUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ stripe_connected: true, stripe_payment_method_id: "pm_1" }) })
+      expect.objectContaining({
+        data: expect.objectContaining({
+          stripe_connected: true,
+          stripe_payment_method_id: "pm_1",
+          stripe_subscription_id: "sub_1",
+          stripe_subscription_status: "active",
+        }),
+      })
     );
-    expect(res.body).toMatchObject({ connected: true, cardBrand: "mastercard", cardLast4: "1234" });
+    expect(res.body).toMatchObject({
+      connected: true,
+      cardBrand: "mastercard",
+      cardLast4: "1234",
+      subscriptionId: "sub_1",
+      subscriptionStatus: "active",
+    });
+  });
+
+  it("still flips stripe_connected even when Stripe has no subscription to report", async () => {
+    onboardingSessionFindUnique.mockResolvedValue({
+      clients: {
+        id: "c1",
+        client_billing: {
+          stripe_customer_id: "cus_1",
+          stripe_connected: false,
+          stripe_subscription_id: null,
+          stripe_subscription_status: null,
+          stripe_card_brand: null,
+          stripe_card_last4: null,
+          stripe_connected_at: null,
+        },
+      },
+    });
+    paymentMethodsList.mockResolvedValue({ data: [{ id: "pm_1", card: { brand: "visa", last4: "4242" } }] });
+    subscriptionsList.mockResolvedValue({ data: [] });
+    const res = mockRes();
+    await handler(mockReq() as never, res as never);
+    expect(clientBillingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({ stripe_subscription_id: expect.anything() }),
+      })
+    );
+    expect(res.body).toMatchObject({ connected: true, subscriptionId: null, subscriptionStatus: null });
   });
 
   it("reports not connected when Stripe has no payment method attached either", async () => {
