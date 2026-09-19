@@ -4,7 +4,16 @@ import { findCompanyBoard, serializeTask } from "@/lib/api/projectAccess";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export default withAuth(async (req, res, session) => {
-  const companyId = resolveTargetCompanyId(session, req);
+  /**
+   * The same fallback /api/project/boards already has: a staff member who has not picked a client
+   * works on their own company's boards rather than being refused.
+   *
+   * Without it the board list loaded and its tasks did not. panelFetch only appends companyId when
+   * an active client is in localStorage, so with none selected this route answered 400 and the
+   * board rendered "Could not load tasks. Refresh this board to retry." — on a board that had just
+   * been fetched successfully by the endpoint next door.
+   */
+  const companyId = resolveTargetCompanyId(session, req) ?? session.companyId;
   if (!companyId) {
     return res.status(400).json({ message: "companyId is required" });
   }

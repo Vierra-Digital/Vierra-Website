@@ -1,5 +1,6 @@
 import React from "react"
-import { FiChevronDown, FiX } from "react-icons/fi"
+import PanelCombobox from "@/components/panel/PanelCombobox"
+import { FiX } from "react-icons/fi"
 
 /**
  * The panel's modal form styling, in one place.
@@ -30,25 +31,14 @@ export const PanelFieldLabel: React.FC<{
   </label>
 )
 
-/** A select in the panel's field styling, with our chevron rather than the platform's. */
+/** A dropdown in the panel's field styling — see PanelCombobox for why it is not a `<select>`. */
 export const PanelFieldSelect: React.FC<{
   value: string
   onChange: (value: string) => void
-  children: React.ReactNode
-}> = ({ value, onChange, children }) => (
-  <span className="relative block">
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className={`${PANEL_FIELD} appearance-none pr-9`}
-    >
-      {children}
-    </select>
-    <FiChevronDown
-      className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]"
-      aria-hidden
-    />
-  </span>
+  options: Array<{ value: string; label: string }>
+  "aria-label"?: string
+}> = ({ value, onChange, options, "aria-label": ariaLabel }) => (
+  <PanelCombobox aria-label={ariaLabel} value={value} onChange={onChange} options={options} />
 )
 
 export const PanelModalHeader: React.FC<{ title: string; onClose: () => void }> = ({ title, onClose }) => (

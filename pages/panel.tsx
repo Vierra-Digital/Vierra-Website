@@ -648,6 +648,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                         <UserSettingsPage
                           readOnly
                           canManageClient
+                          viewerRole={resolvedUserRole}
                           variant="panel"
                           userRole="user"
                           billingCompanyId={viewClient?.companyId ?? null}

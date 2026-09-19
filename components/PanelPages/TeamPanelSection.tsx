@@ -971,12 +971,15 @@ const InviteTeammateModal: React.FC<{
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Position <span className="text-[#B42318]">*</span>
                         </label>
-                        <FieldSelect value={position} onChange={setPosition}>
-                            <option value="">Not set</option>
-                            {POSITION_OPTIONS.map((option) => (
-                                <option key={option} value={option}>{option}</option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Position"
+                            value={position}
+                            onChange={setPosition}
+                            options={[
+                                { value: "", label: "Not Set" },
+                                ...POSITION_OPTIONS.map((option) => ({ value: option, label: option })),
+                            ]}
+                        />
                     </div>
                     <div>
                         {/* A picker, not the free-text box the edit dialog still uses: the column is a
@@ -984,35 +987,46 @@ const InviteTeammateModal: React.FC<{
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
                         </label>
-                        <FieldSelect value={mentorId} onChange={setMentorId}>
-                            <option value="">None</option>
-                            {mentorOptions.map((option) => (
-                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Mentor"
+                            value={mentorId}
+                            onChange={setMentorId}
+                            options={[
+                                { value: "", label: "None" },
+                                ...mentorOptions.map((option) => ({
+                                    value: option.id,
+                                    label: option.name || option.email,
+                                })),
+                            ]}
+                        />
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Strikes <span className="text-[#B42318]">*</span>
                         </label>
-                        <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
-                            {[0, 1, 2, 3].map((n) => (
-                                <option key={n} value={n}>{n}/3</option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Strikes"
+                            value={String(strikes)}
+                            onChange={(value) => setStrikes(Number(value))}
+                            options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: `${n}/3` }))}
+                        />
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Time Zone <span className="text-[#B42318]">*</span>
                         </label>
-                        <FieldSelect value={timeZone} onChange={setTimeZone}>
-                            <option value="">Select A Time Zone</option>
-                            {TIME_ZONE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {timeZoneLabel(option.value)}
-                                </option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Time Zone"
+                            value={timeZone}
+                            onChange={setTimeZone}
+                            options={[
+                                { value: "", label: "Select A Time Zone" },
+                                ...TIME_ZONE_OPTIONS.map((option) => ({
+                                    value: option.value,
+                                    label: timeZoneLabel(option.value),
+                                })),
+                            ]}
+                        />
                     </div>
                 </div>
 
@@ -1141,48 +1155,59 @@ const ManageStaffModal: React.FC<{
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Position <span className="text-[#B42318]">*</span>
                     </label>
-                    <FieldSelect value={position} onChange={setPosition}>
-                        <option value="">Not set</option>
-                        {POSITION_OPTIONS.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                        ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Position"
+                        value={position}
+                        onChange={setPosition}
+                        options={[
+                            { value: "", label: "Not Set" },
+                            ...POSITION_OPTIONS.map((option) => ({ value: option, label: option })),
+                        ]}
+                    />
                 </div>
                 <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
                     </label>
-                    <FieldSelect value={mentorId} onChange={setMentorId}>
-                        <option value="">None</option>
-                        {mentorOptions
-                            .filter((option) => option.id !== staff.id)
-                            .map((option) => (
-                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
-                            ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Mentor"
+                        value={mentorId}
+                        onChange={setMentorId}
+                        options={[
+                            { value: "", label: "None" },
+                            ...mentorOptions
+                                .filter((option) => option.id !== staff.id)
+                                .map((option) => ({ value: option.id, label: option.name || option.email })),
+                        ]}
+                    />
                 </div>
                 <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Strikes <span className="text-[#B42318]">*</span>
                     </label>
-                    <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
-                        {[0, 1, 2, 3].map((n) => (
-                            <option key={n} value={n}>{n}/3</option>
-                        ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Strikes"
+                        value={String(strikes)}
+                        onChange={(value) => setStrikes(Number(value))}
+                        options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: `${n}/3` }))}
+                    />
                 </div>
                 <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Time Zone <span className="text-[#B42318]">*</span>
                     </label>
-                    <FieldSelect value={timeZone} onChange={setTimeZone}>
-                        <option value="">Select A Time Zone</option>
-                        {TIME_ZONE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                                {timeZoneLabel(option.value)}
-                            </option>
-                        ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Time Zone"
+                        value={timeZone}
+                        onChange={setTimeZone}
+                        options={[
+                            { value: "", label: "Select A Time Zone" },
+                            ...TIME_ZONE_OPTIONS.map((option) => ({
+                                value: option.value,
+                                label: timeZoneLabel(option.value),
+                            })),
+                        ]}
+                    />
                 </div>
             </div>
 

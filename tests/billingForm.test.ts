@@ -88,6 +88,11 @@ describe("phone", () => {
     expect(formatPhone("   ")).toBe("");
   });
 
+  it("says so plainly rather than describing the length", () => {
+    expect(validateBillingForm({ ...empty, phone: "12345" }).phone).toBe("Not a valid phone number.");
+    expect(validateBillingForm({ ...empty, email: "nope" }).email).toBe("Not a valid email address.");
+  });
+
   it("rejects a number too short or too long to be one", () => {
     expect(validateBillingForm({ ...empty, phone: "12345" }).phone).toBeTruthy();
     expect(validateBillingForm({ ...empty, phone: "+1 234567890123456789" }).phone).toBeTruthy();
@@ -99,16 +104,29 @@ describe("phone", () => {
 });
 
 describe("country and state", () => {
-  it("offers a country list, all two-letter codes", () => {
-    expect(COUNTRIES.length).toBeGreaterThan(5);
+  it("offers every country, all two-letter codes, sorted by name", () => {
+    expect(COUNTRIES.length).toBeGreaterThan(200);
     for (const c of COUNTRIES) expect(c.code, c.name).toMatch(/^[A-Z]{2}$/);
+    expect(new Set(COUNTRIES.map((c) => c.code)).size).toBe(COUNTRIES.length);
+    const names = COUNTRIES.map((c) => c.name);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    // Named, not left as bare codes.
+    expect(COUNTRIES.find((c) => c.code === "US")?.name).toBe("United States");
   });
 
-  it("lists the subdivisions of the two countries that have them", () => {
+  it("lists the subdivisions of the countries whose addresses carry one", () => {
     expect(SUBDIVISIONS.US).toHaveLength(51); // 50 states plus DC
     expect(SUBDIVISIONS.CA).toHaveLength(13);
+    expect(SUBDIVISIONS.AU).toHaveLength(8);
+    expect(SUBDIVISIONS.MX).toHaveLength(32);
+    expect(SUBDIVISIONS.BR).toHaveLength(27);
+    expect(SUBDIVISIONS.IN).toHaveLength(36);
     expect(SUBDIVISIONS.US.some((s) => s.code === "MA")).toBe(true);
     expect(SUBDIVISIONS.CA.some((s) => s.code === "ON")).toBe(true);
+    // Every listed country is one the form actually offers.
+    for (const code of Object.keys(SUBDIVISIONS)) {
+      expect(COUNTRIES.some((c) => c.code === code), code).toBe(true);
+    }
   });
 
   it("rejects a state that is not in the chosen country's list", () => {
@@ -119,7 +137,7 @@ describe("country and state", () => {
 
   it("accepts free-text regions where there is no list", () => {
     expect(
-      validateBillingForm({ ...empty, line1: "1 Main St", country: "DE", state: "Bayern", postalCode: "80331" }).state
+      validateBillingForm({ ...empty, line1: "1 Main St", city: "Munich", country: "DE", state: "Bayern", postalCode: "80331" }).state
     ).toBeUndefined();
   });
 
@@ -130,8 +148,16 @@ describe("country and state", () => {
 
 describe("postal code", () => {
   it("checks the shape for the countries whose shape is known", () => {
+    // A complete address around the code, so the all-or-nothing rule does not mask the shape check.
     const at = (country: string, postalCode: string) =>
-      validateBillingForm({ ...empty, line1: "1 Main St", country, postalCode }).postalCode;
+      validateBillingForm({
+        ...empty,
+        line1: "1 Main St",
+        city: "Town",
+        state: SUBDIVISIONS[country]?.[0]?.code ?? "",
+        country,
+        postalCode,
+      }).postalCode;
 
     expect(at("US", "02155")).toBeUndefined();
     expect(at("US", "02155-1234")).toBeUndefined();
@@ -151,31 +177,65 @@ describe("postal code", () => {
 
   it("does not invent a rule for a country it has none for", () => {
     expect(
-      validateBillingForm({ ...empty, line1: "1 Main St", country: "SG", postalCode: "018956" }).postalCode
+      validateBillingForm({ ...empty, line1: "1 Main St", city: "Singapore", country: "SG", postalCode: "018956" }).postalCode
     ).toBeUndefined();
   });
 
   it("has no rule to apply when no country is chosen", () => {
-    expect(validateBillingForm({ ...empty, line1: "1 Main St", postalCode: "whatever" }).postalCode).toBeUndefined();
+    // The country itself is what gets reported missing, not the shape of the code.
+    const noCountry = validateBillingForm({ ...empty, line1: "1 Main St", city: "Town", postalCode: "whatever" });
+    expect(noCountry.postalCode).toBeUndefined();
+    expect(noCountry.country).toBeTruthy();
   });
 });
 
-describe("a half-finished address", () => {
-  it("asks for the street before the rest", () => {
-    // A postcode with no street cannot be delivered to; Stripe would take it regardless.
+describe("an address is all-or-nothing", () => {
+  it("asks for the missing parts as soon as one is filled", () => {
+    // A fragment cannot be delivered to, and Stripe would print it on an invoice as given.
+    const started = validateBillingForm({ ...empty, line1: "3 Ashland Street" });
+    expect(started.city).toBeTruthy();
+    expect(started.country).toBeTruthy();
+  });
+
+  it("names the street when the rest was filled without it", () => {
     expect(validateBillingForm({ ...empty, postalCode: "02155", country: "US" }).line1).toBeTruthy();
     expect(validateBillingForm({ ...empty, city: "Medford" }).line1).toBeTruthy();
-    expect(validateBillingForm({ ...empty, country: "US", state: "MA" }).line1).toBeTruthy();
   });
 
-  it("does not ask for one when the address is untouched", () => {
-    expect(validateBillingForm({ ...empty, name: "Acme", email: "a@b.co" }).line1).toBeUndefined();
+  it("does not ask for anything when the address is untouched", () => {
+    // Most customers have no address at all, and saving that is legitimate.
+    expect(validateBillingForm({ ...empty, name: "Acme", email: "a@b.co" })).toEqual({});
   });
 
-  it("is satisfied once the street is there", () => {
+  it("is satisfied by a complete one", () => {
     expect(
-      validateBillingForm({ ...empty, line1: "3 Ashland Street", city: "Medford", country: "US", postalCode: "02155" })
+      validateBillingForm({
+        ...empty,
+        line1: "3 Ashland Street",
+        city: "Medford",
+        state: "MA",
+        postalCode: "02155",
+        country: "US",
+      })
     ).toEqual({});
+  });
+
+  it("requires a state only where subdivisions are listed", () => {
+    const inUs = validateBillingForm({ ...empty, line1: "1 Main St", city: "Boston", country: "US", postalCode: "02101" });
+    expect(inUs.state).toBeTruthy();
+
+    // Singapore addresses carry no state, and none is listed, so none is demanded.
+    const inSg = validateBillingForm({ ...empty, line1: "1 Raffles Pl", city: "Singapore", country: "SG" });
+    expect(inSg.state).toBeUndefined();
+  });
+
+  it("requires a postal code only where the country uses one", () => {
+    const inUs = validateBillingForm({ ...empty, line1: "1 Main St", city: "Boston", state: "MA", country: "US" });
+    expect(inUs.postalCode).toBeTruthy();
+
+    // Ireland has no rule listed, so a missing Eircode is not invented as an error.
+    const inIe = validateBillingForm({ ...empty, line1: "1 Grafton St", city: "Dublin", country: "IE" });
+    expect(inIe.postalCode).toBeUndefined();
   });
 });
 

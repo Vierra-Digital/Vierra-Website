@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react"
-import { FiChevronDown, FiX } from "react-icons/fi"
+import { FiX } from "react-icons/fi"
 import Modal from "@/components/ui/Modal"
+import { PANEL_FIELD, PANEL_FIELD_INVALID } from "@/components/ui/PanelForm"
+import PanelCombobox from "@/components/panel/PanelCombobox"
 import type { BillingDetails } from "@/lib/billing/billingDetails"
 import {
     COUNTRIES,
@@ -25,10 +27,26 @@ import {
  * No card fields here, deliberately. Those stay on Stripe's own pages.
  */
 
-const FIELD_BASE =
-    "h-9 w-full rounded-[10px] border px-3 text-[13px] text-[#111827] placeholder:text-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-const FIELD_OK = "border-[#E4E0EC] bg-white focus:ring-[#701CC0]/35"
-const FIELD_BAD = "border-[#F0A9A3] bg-[#FEF8F7] focus:ring-[#B42318]/30"
+/**
+ * The panel's own field treatment, not a second one invented here.
+ *
+ * PANEL_FIELD is what Invite Staff, Edit Staff and Add Client use — a filled input on the panel's
+ * lilac, with the ring appearing on focus — and PANEL_FIELD_INVALID is its flagged twin. The
+ * dialog had its own bordered white variant, which is why its inputs and its dropdowns read as
+ * belonging to a different product.
+ */
+const FIELD_OK = `${PANEL_FIELD} placeholder:text-[#9CA3AF] disabled:cursor-not-allowed disabled:opacity-60`
+const FIELD_BAD = `${PANEL_FIELD_INVALID} placeholder:text-[#9CA3AF] disabled:cursor-not-allowed disabled:opacity-60`
+
+/** What the subdivision is called where one is listed. */
+const SUBDIVISION_LABELS: Record<string, string> = {
+    US: "State",
+    CA: "Province",
+    AU: "State",
+    MX: "State",
+    BR: "State",
+    IN: "State",
+}
 
 const LABEL = "mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]"
 
@@ -84,8 +102,7 @@ const EditBillingDetailsModal: React.FC<Props> = ({ details, companyId, onClose,
     /** Only the two countries with a list; everywhere else keeps a free-text region field. */
     const subdivisions = SUBDIVISIONS[form.country.toUpperCase()] ?? null
 
-    const inputClass = (key: keyof BillingForm) =>
-        `${FIELD_BASE} ${shown(key) ? FIELD_BAD : FIELD_OK}`
+    const inputClass = (key: keyof BillingForm) => (shown(key) ? FIELD_BAD : FIELD_OK)
 
     const save = async () => {
         // Everything counts as touched on submit, so a field the person never visited still shows
@@ -230,26 +247,19 @@ const EditBillingDetailsModal: React.FC<Props> = ({ details, companyId, onClose,
 
                 <div>
                     <label className={LABEL} htmlFor="bd-country">Country</label>
-                    <span className="relative block">
-                        <select
-                            id="bd-country"
-                            className={`${inputClass("country")} appearance-none pr-9`}
-                            value={form.country.toUpperCase()}
-                            onChange={(e) => {
-                                // A state from the old country is meaningless under the new one.
-                                setForm((prev) => ({ ...prev, country: e.target.value, state: "" }))
-                                setTouched((prev) => ({ ...prev, country: true }))
-                            }}
-                        >
-                            <option value="">Not set</option>
-                            {COUNTRIES.map((c) => (
-                                <option key={c.code} value={c.code}>
-                                    {c.name}
-                                </option>
-                            ))}
-                        </select>
-                        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" aria-hidden />
-                    </span>
+<PanelCombobox
+                        id="bd-country"
+                        aria-label="Country"
+                        value={form.country.toUpperCase()}
+                        invalid={!!shown("country")}
+                        placeholder="Not Set"
+                        options={[{ value: "", label: "Not Set" }, ...COUNTRIES.map((c) => ({ value: c.code, label: c.name }))]}
+                        onChange={(next) => {
+                            // A state from the old country is meaningless under the new one.
+                            setForm((prev) => ({ ...prev, country: next, state: "" }))
+                            setTouched((prev) => ({ ...prev, country: true }))
+                        }}
+                    />
                     <FieldError message={shown("country")} />
                 </div>
 
@@ -268,28 +278,39 @@ const EditBillingDetailsModal: React.FC<Props> = ({ details, companyId, onClose,
                     </div>
                     <div>
                         <label className={LABEL} htmlFor="bd-state">
-                            {form.country.toUpperCase() === "CA" ? "Province" : "State"}
+                            {SUBDIVISION_LABELS[form.country.toUpperCase()] ?? "State"}
                         </label>
-                        {subdivisions ? (
-                            <span className="relative block">
-                                <select
-                                    id="bd-state"
-                                    className={`${inputClass("state")} appearance-none pr-9`}
-                                    value={form.state.toUpperCase()}
-                                    onChange={(e) => {
-                                        set("state", e.target.value)
-                                        blur("state")
-                                    }}
-                                >
-                                    <option value="">Not set</option>
-                                    {subdivisions.map((s) => (
-                                        <option key={s.code} value={s.code}>
-                                            {s.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6B7280]" aria-hidden />
-                            </span>
+                        {/* A dropdown wherever we have the list, free text where we do not, and
+                            neither until a country is chosen — a region list cannot be offered
+                            before we know which country it belongs to, and a box that turns into a
+                            dropdown the moment the country changes reads as though the field had
+                            disappeared. */}
+                        {!form.country ? (
+                            <PanelCombobox
+                                id="bd-state"
+                                aria-label="State"
+                                value=""
+                                disabled
+                                placeholder="Choose a country first"
+                                options={[]}
+                                onChange={() => {}}
+                            />
+                        ) : subdivisions ? (
+                            <PanelCombobox
+                                id="bd-state"
+                                aria-label={SUBDIVISION_LABELS[form.country.toUpperCase()] ?? "State"}
+                                value={form.state.toUpperCase()}
+                                invalid={!!shown("state")}
+                                placeholder="Not Set"
+                                options={[
+                                    { value: "", label: "Not Set" },
+                                    ...subdivisions.map((sub) => ({ value: sub.code, label: sub.name })),
+                                ]}
+                                onChange={(next) => {
+                                    set("state", next)
+                                    blur("state")
+                                }}
+                            />
                         ) : (
                             /* Free text where we have no list — inventing one for every country
                                would reject regions that are perfectly real. */

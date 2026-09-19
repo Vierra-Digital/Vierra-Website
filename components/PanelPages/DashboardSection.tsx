@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
+import PanelCombobox from "@/components/panel/PanelCombobox";
 import Link from "next/link"
-import { RiArrowDropDownLine } from "react-icons/ri"
 import { FiArrowRight } from "react-icons/fi"
 import LTVCalculatorModal from "@/components/panel/LTVCalculatorModal"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
@@ -436,19 +436,16 @@ const DashboardSection = () => {
                     <div className="bg-[#F1EFF6] rounded-xl p-4">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
-                            <div className="relative">
-                                <select
+                            <div className="w-40">
+                                <PanelCombobox
+                                    aria-label="Month"
                                     value={monthFilter}
-                                    onChange={(e) => setMonthOverride(e.target.value)}
-                                    className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
-                                >
-                                    {monthOptions.map((month) => (
-                                        <option key={month.value} value={month.value}>
-                                            {month.label}
-                                        </option>
-                                    ))}
-                                </select>
-                                <RiArrowDropDownLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                                    onChange={setMonthOverride}
+                                    options={monthOptions.map((month) => ({
+                                        value: month.value,
+                                        label: month.label,
+                                    }))}
+                                />
                             </div>
                         </div>
                         <div className="h-[242px] rounded-lg p-3">
