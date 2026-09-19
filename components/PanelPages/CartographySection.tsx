@@ -6,6 +6,7 @@ import type { CartographyLocation } from "@/pages/api/cartography/locations";
 import ReviewQueue from "@/components/PanelPages/CartographySection/ReviewQueue";
 import { companyUrl } from "@/lib/cartography/companyUrl";
 import { panelFetch } from "@/lib/panelFetch";
+import { useActiveClient } from "@/lib/activeClient";
 
 // Shape of a /prospect job's payload once it reaches a terminal status, as cached by
 // pages/api/prospect/callback.ts and served by pages/api/prospect/[jobId].ts. Every value on a
@@ -92,6 +93,38 @@ const CartographySection: React.FC = () => {
       })
       .catch(() => {
         if (!cancelled) setReferenceLocations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Whose brand universe agent-mode runs seek leads on behalf of. Backed by the same
+  // localStorage-shared context panelFetch reads (lib/activeClient.tsx) — not a Cartography-local
+  // choice, since switching it here has to mean the same thing everywhere else that scopes by the
+  // active client. An empty value clears it, which is what makes "Vierra" the default: with
+  // nothing set, every panelFetch call (including this one) already resolves to the staff
+  // member's own session, which is always Vierra's fixed company (see lib/api/targetCompany.ts).
+  const { activeClient, setActiveClient } = useActiveClient();
+  const [clientOptions, setClientOptions] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/clients")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: { companyId: string; businessName: string; name: string }[]) => {
+        if (cancelled || !Array.isArray(data)) return;
+        // The picker is scoped to companies, not client contacts — a company with several client
+        // rows (see lib/api/billingClient.ts's own reasoning for this exact ambiguity) would
+        // otherwise show one entry per contact, all resolving to the same companyId.
+        const byCompany = new Map<string, string>();
+        for (const c of data) {
+          if (!byCompany.has(c.companyId)) byCompany.set(c.companyId, c.businessName || c.name);
+        }
+        setClientOptions(Array.from(byCompany, ([id, name]) => ({ id, name })));
+      })
+      .catch(() => {
+        if (!cancelled) setClientOptions([]);
       });
     return () => {
       cancelled = true;
@@ -342,11 +375,35 @@ const CartographySection: React.FC = () => {
     <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-y-auto">
       <div className="flex-1 flex justify-center px-6 pb-10">
         <div className="mx-auto w-full max-w-[1680px] flex flex-col">
-          <div className="pt-8 pb-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-[#111827]">Cartography</h1>
-            <p className="mt-1 text-sm text-[#6B7280]">
-              Lead sourcing — search the existing pool, or describe a target and let an agent go find one.
-            </p>
+          <div className="pt-8 pb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#111827]">Cartography</h1>
+              <p className="mt-1 text-sm text-[#6B7280]">
+                Lead sourcing — search the existing pool, or describe a target and let an agent go find one.
+              </p>
+            </div>
+            {/* Search reads the shared pool regardless of this — only agent-mode runs are scoped
+                to one client's brand universe. Shown here anyway rather than hidden per-mode: it
+                is easy to switch modes without noticing which client is still selected. */}
+            <div className="w-56 shrink-0">
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
+                Agent Seeks Leads For
+              </label>
+              <PanelCombobox
+                tone="dark"
+                aria-label="Client the agent seeks leads for"
+                value={activeClient?.id ?? ""}
+                onChange={(value) => {
+                  const picked = clientOptions.find((c) => c.id === value);
+                  setActiveClient(picked ? { id: picked.id, name: picked.name } : null);
+                }}
+                placeholder="Vierra"
+                options={[
+                  { value: "", label: "Vierra (default)" },
+                  ...clientOptions.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
           </div>
 
           {/* Discover finds candidates; Review Queue is where they get turned into real
@@ -441,6 +498,7 @@ const CartographySection: React.FC = () => {
               <>
                 <div className="w-48 shrink-0">
                   <PanelCombobox
+                    tone="dark"
                     aria-label="Filter by distance from city"
                     value={centerCity}
                     onChange={setCenterCity}
@@ -456,6 +514,7 @@ const CartographySection: React.FC = () => {
                 </div>
                 <div className="w-36 shrink-0">
                   <PanelCombobox
+                    tone="dark"
                     aria-label="Distance radius"
                     value={String(radiusMiles)}
                     onChange={(value) => setRadiusMiles(Number(value))}

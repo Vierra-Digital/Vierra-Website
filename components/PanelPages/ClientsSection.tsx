@@ -5,14 +5,22 @@ import { FiPlus, FiFilter, FiChevronDown, FiTrash2, FiCheckCircle, FiXCircle, Fi
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import {
     PanelButton,
+    PanelCard,
     PanelClearFilters,
-    PanelDataTable,
     PanelEmptyCell,
+    PanelEmptyState,
     PanelHeader,
     PanelPage,
+    PanelPagination,
     PanelPopover,
     PanelSearch,
     PanelSelect,
+    PanelTable,
+    PanelTbody,
+    PanelTd,
+    PanelTh,
+    PanelThead,
+    PanelTr,
 } from "@/components/panel/PanelTable"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
@@ -141,6 +149,8 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
     const refreshButtonRef = useRef<HTMLButtonElement>(null)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
+    /** Companies whose team list is open. A company with one contact never gets a chevron at all. */
+    const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(new Set())
     const [searchQuery, setSearchQuery] = useState("")
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const [sortBy, setSortBy] = useState<'name' | 'business' | 'industry' | 'retainer' | 'goal' | 'status'>("name")
@@ -359,11 +369,52 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         return sorted
     }, [rows, searchQuery, statusFilter, industryFilter, sortBy, sortDir])
 
-    // Page index clamped rather than reset from an effect. Searching to a shorter list could leave
-    // currentPage past the end, and slicing beyond the array renders an empty table with nothing to
-    // explain it; the old effect only covered searchQuery, not the status or sort filters.
-    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    /**
+     * filteredRows grouped by company, in the order each company first appears in the sorted/
+     * filtered list — so sorting by, say, retainer surfaces the highest-paying contact's company
+     * first, with the rest of that company's team behind a chevron rather than scattered through
+     * the list by their own individual values.
+     */
+    const groups = useMemo(() => {
+        const byCompany = new Map<string, ClientRow[]>()
+        for (const r of filteredRows) {
+            const existing = byCompany.get(r.companyId)
+            if (existing) existing.push(r)
+            else byCompany.set(r.companyId, [r])
+        }
+        return Array.from(byCompany.values())
+    }, [filteredRows])
+
+    // Paginated by company, not by client row — expanding a team must not shift which companies
+    // are on this page, and "10 per page" reading as "10 companies" is what a staff member
+    // browsing the roster actually expects.
+    const totalPages = Math.max(1, Math.ceil(groups.length / pageSize))
     const page = Math.min(currentPage, totalPages - 1)
+    const pageGroups = groups.slice(page * pageSize, (page + 1) * pageSize)
+
+    const toggleExpanded = (companyId: string) => {
+        setExpandedCompanies((prev) => {
+            const next = new Set(prev)
+            if (next.has(companyId)) next.delete(companyId)
+            else next.add(companyId)
+            return next
+        })
+    }
+
+    /** One row per client actually shown: a group's first member always, its teammates only when
+     *  that company's chevron is open. A single-contact company never carries a chevron at all. */
+    type DisplayEntry = { client: ClientRow; groupSize: number; isPrimary: boolean; expanded: boolean }
+    const displayEntries: DisplayEntry[] = []
+    for (const members of pageGroups) {
+        const expanded = members.length > 1 && expandedCompanies.has(members[0].companyId)
+        displayEntries.push({ client: members[0], groupSize: members.length, isPrimary: true, expanded })
+        if (expanded) {
+            for (const member of members.slice(1)) {
+                displayEntries.push({ client: member, groupSize: members.length, isPrimary: false, expanded: true })
+            }
+        }
+    }
+
     /** Every industry present in the data, so the filter offers what can actually be selected. */
     const industryOptions = useMemo(
         () => Array.from(new Set(rows.map((r) => r.industry).filter((v): v is string => Boolean(v)))).sort(),
@@ -472,96 +523,141 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                 </PanelButton>
             </PanelHeader>
 
-            <PanelDataTable<ClientRow>
-                rows={filteredRows}
-                getRowKey={(r) => r.id}
-                loading={loading}
-                loadingLabel={<LoadingSpinner label="Loading Client Data..." />}
-                page={page}
-                pageSize={pageSize}
-                onPageChange={setCurrentPage}
-                emptyTitle="No Clients Found"
-                emptyMessage="No clients match your search."
-                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
-                columns={[
-                    {
-                        key: "name",
-                        header: "Client Name",
-                        cell: (r) => (
-                            <div className="flex items-center gap-3">
-                                <ProfileImage
-                                    src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
-                                    name={r.name}
-                                    size={32}
-                                    alt={`${r.name}'s profile`}
-                                />
-                                <div className="min-w-0">
-                                    <button
-                                        type="button"
-                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
-                                        className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
-                                    >
-                                        {r.name || "—"}
-                                    </button>
-                                    <div className="truncate text-[12px] text-[#6B7280]">{r.email || ""}</div>
-                                </div>
-                            </div>
-                        ),
-                    },
-                    { key: "business", header: "Business Name", cell: (r) => r.businessName || <PanelEmptyCell /> },
-                    { key: "industry", header: "Industry", cell: (r) => r.industry || r.targetAudience || <PanelEmptyCell /> },
-                    {
-                        key: "retainer",
-                        header: "Monthly Retainer ($)",
-                        className: "tabular-nums",
-                        cell: (r) =>
-                            typeof r.monthlyRetainer === "number" ? `$${r.monthlyRetainer.toLocaleString()}` : <PanelEmptyCell />,
-                    },
-                    {
-                        key: "goal",
-                        header: "Client Goal",
-                        className: "tabular-nums",
-                        cell: (r) =>
-                            typeof r.clientGoal === "number"
-                                ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
-                                : <PanelEmptyCell />,
-                    },
-                    {
-                        key: "status",
-                        header: "Status",
-                        cell: (r) =>
-                            updatingClient === r.id ? (
-                                <span role="status" className="text-[12px] text-[#6B7280]">Updating…</span>
-                            ) : statusNeedsRefresh === r.id ? (
-                                <span className="text-[12px] text-amber-700">Refresh required</span>
-                            ) : (
-                                <StatusBadge status={r.status} />
-                            ),
-                    },
-                    {
-                        key: "manage",
-                        header: "Manage",
-                        className: "relative",
-                        cell: (r) => (
-                            <ClientActionsMenu
-                                clientId={r.id}
-                                clientName={r.name}
-                                isActive={r.isActive}
-                                hasImage={r.image}
-                                isAdmin={isAdmin}
-                                busy={updatingClient === r.id || deleting}
-                                triggerId={`open-client-${r.id}`}
-                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
-                                isWorkingOn={activeCompanyId === r.companyId}
-                                onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
-                                onClearActive={() => onSetActiveClient?.(null)}
-                                onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
-                                onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
-                            />
-                        ),
-                    },
-                ]}
-            />
+            {loading ? (
+                <div className="flex items-center justify-center py-12">
+                    <LoadingSpinner label="Loading Client Data..." />
+                </div>
+            ) : groups.length === 0 ? (
+                <PanelEmptyState
+                    title="No Clients Found"
+                    message="No clients match your search."
+                    image={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
+                />
+            ) : (
+                <PanelCard>
+                    <PanelTable>
+                        <PanelThead>
+                            <PanelTr>
+                                <PanelTh>Client Name</PanelTh>
+                                <PanelTh>Contact Name</PanelTh>
+                                <PanelTh>Industry</PanelTh>
+                                <PanelTh>Monthly Retainer ($)</PanelTh>
+                                <PanelTh>Client Goal</PanelTh>
+                                <PanelTh>Status</PanelTh>
+                                <PanelTh className="relative">Manage</PanelTh>
+                            </PanelTr>
+                        </PanelThead>
+                        <PanelTbody>
+                            {displayEntries.map((entry) => {
+                                const r = entry.client
+                                const row = (
+                                    <>
+                                        <PanelTd>
+                                            <div className="flex items-center gap-3">
+                                                {/* A single-contact company gets no chevron and no indent — this is
+                                                    exactly today's flat row for the common case. A teammate row is
+                                                    indented in its chevron's place instead of under the business
+                                                    name, so every label in the group still lines up at the same
+                                                    left edge. The company, not any one person, is what this column
+                                                    and its expand control identify. */}
+                                                {entry.groupSize > 1 && entry.isPrimary ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleExpanded(r.companyId)}
+                                                        aria-label={entry.expanded ? `Collapse ${r.businessName || "team"}` : `Expand ${r.businessName || "team"}`}
+                                                        aria-expanded={entry.expanded}
+                                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#9CA3AF] transition-colors hover:bg-[#F3F1F8] hover:text-[#374151]"
+                                                    >
+                                                        <FiChevronDown className={`h-4 w-4 transition-transform ${entry.expanded ? "" : "-rotate-90"}`} />
+                                                    </button>
+                                                ) : entry.groupSize > 1 ? (
+                                                    <span className="w-6 shrink-0" aria-hidden />
+                                                ) : null}
+                                                <div className="min-w-0">
+                                                    <div className={`truncate ${entry.isPrimary ? "font-medium text-[#111827]" : "text-[#6B7280]"}`}>
+                                                        {r.businessName || "—"}
+                                                    </div>
+                                                    {entry.groupSize > 1 && entry.isPrimary && (
+                                                        <span className="whitespace-nowrap rounded-full bg-[#F3F1F8] px-1.5 py-0.5 text-[10.5px] font-medium text-[#5B5468]">
+                                                            {entry.groupSize} contacts
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </PanelTd>
+                                        <PanelTd>
+                                            <div className="flex items-center gap-3">
+                                                <ProfileImage
+                                                    src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
+                                                    name={r.name}
+                                                    size={32}
+                                                    alt={`${r.name}'s profile`}
+                                                />
+                                                <div className="min-w-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
+                                                        className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
+                                                    >
+                                                        {r.name || "—"}
+                                                    </button>
+                                                    <div className="truncate text-[12px] text-[#6B7280]">{r.email || ""}</div>
+                                                </div>
+                                            </div>
+                                        </PanelTd>
+                                        <PanelTd>{r.industry || r.targetAudience || <PanelEmptyCell />}</PanelTd>
+                                        <PanelTd className="tabular-nums">
+                                            {typeof r.monthlyRetainer === "number" ? `$${r.monthlyRetainer.toLocaleString()}` : <PanelEmptyCell />}
+                                        </PanelTd>
+                                        <PanelTd className="tabular-nums">
+                                            {typeof r.clientGoal === "number"
+                                                ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
+                                                : <PanelEmptyCell />}
+                                        </PanelTd>
+                                        <PanelTd>
+                                            {updatingClient === r.id ? (
+                                                <span role="status" className="text-[12px] text-[#6B7280]">Updating…</span>
+                                            ) : statusNeedsRefresh === r.id ? (
+                                                <span className="text-[12px] text-amber-700">Refresh required</span>
+                                            ) : (
+                                                <StatusBadge status={r.status} />
+                                            )}
+                                        </PanelTd>
+                                        <PanelTd className="relative">
+                                            <ClientActionsMenu
+                                                clientId={r.id}
+                                                clientName={r.name}
+                                                isActive={r.isActive}
+                                                hasImage={r.image}
+                                                isAdmin={isAdmin}
+                                                busy={updatingClient === r.id || deleting}
+                                                triggerId={`open-client-${r.id}`}
+                                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email, companyId: r.companyId })}
+                                                isWorkingOn={activeCompanyId === r.companyId}
+                                                onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
+                                                onClearActive={() => onSetActiveClient?.(null)}
+                                                onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
+                                                onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
+                                            />
+                                        </PanelTd>
+                                    </>
+                                )
+                                // A teammate row gets a plain <tr>, not <PanelTr> — the light tint marks it as
+                                // nested under the primary row above it, which PanelTr's shared markup has no
+                                // per-row way to express.
+                                return entry.isPrimary ? (
+                                    <PanelTr key={r.id}>{row}</PanelTr>
+                                ) : (
+                                    <tr key={r.id} className="bg-[#FAFAFB]">{row}</tr>
+                                )
+                            })}
+                        </PanelTbody>
+                    </PanelTable>
+                    {totalPages > 1 && (
+                        <PanelPagination page={page} pageSize={pageSize} total={groups.length} onPageChange={setCurrentPage} />
+                    )}
+                </PanelCard>
+            )}
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
             {notice && !error && (
