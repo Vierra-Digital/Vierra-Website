@@ -22,6 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const memberships = await prisma.companyMembership.findMany({
         where: { company_id: companyId },
         include: {
+          // mentor_id is a uuid, and the Mentor column was rendering it verbatim. The dialog still
+          // needs the id to preselect its picker, so both are reported.
+          users_company_memberships_mentor_idTousers: { select: { id: true, name: true, email: true } },
           users_company_memberships_user_idTousers: {
             select: {
               id: true,
@@ -56,6 +59,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           country: null,
           company_email: null,
           mentor: m.mentor_id ?? null,
+          mentorName:
+            m.users_company_memberships_mentor_idTousers?.name ||
+            m.users_company_memberships_mentor_idTousers?.email ||
+            null,
           strikes: m.strikes,
           time_zone: u.user_preferences?.time_zone ?? null,
           // Derived, not read: sign-out and session-expiry paths write "offline" without
@@ -101,6 +108,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           country: null,
           company_email: null,
           mentor: null,
+          mentorName: null,
           strikes: 0,
           time_zone: null,
           status: "offline",
@@ -150,22 +158,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           role: true,
           created_at: true,
           expires_at: true,
+          // The staff detail the inviter filled in. Carried here so an invited person is listed
+          // with what is known about them rather than an email and a row of blanks.
+          first_name: true,
+          last_name: true,
+          position: true,
+          mentor_id: true,
+          time_zone: true,
+          strikes: true,
           companies: { select: { name: true } },
         },
         orderBy: { created_at: "desc" },
       });
       const nowForInvites = new Date();
+      /**
+       * invitations.mentor_id has no relation on the model — it was added by hand in
+       * prisma/manual — so the names are looked up in one go rather than included. Without this
+       * the Mentor column was blank on exactly the rows that had just been given one.
+       */
+      const inviteMentorIds = [
+        ...new Set(pendingInvites.map((i) => i.mentor_id).filter((id): id is string => Boolean(id))),
+      ];
+      const inviteMentors = inviteMentorIds.length
+        ? await prisma.user.findMany({
+            where: { id: { in: inviteMentorIds } },
+            select: { id: true, name: true, email: true },
+          })
+        : [];
+      const inviteMentorById = new Map(inviteMentors.map((m) => [m.id, m.name || m.email]));
       const shapedInvites = pendingInvites.map((invite) => ({
         id: `invite:${invite.id}`,
-        name: null,
+        name: [invite.first_name, invite.last_name].filter(Boolean).join(" ") || null,
         email: invite.email,
-        role: invite.role,
-        position: null,
+        // Role model v2 makes every accepted invite staff, whatever the row happens to say — the
+        // column still defaults to "member" and older rows carry it. Reporting the stored value
+        // would put a fourth tag in a list that only shows Admin, Staff and Client.
+        role: invite.role === "admin" ? "admin" : "staff",
+        position: invite.position,
         country: null,
         company_email: null,
-        mentor: null,
-        strikes: 0,
-        time_zone: null,
+        mentor: invite.mentor_id,
+        mentorName: invite.mentor_id ? inviteMentorById.get(invite.mentor_id) ?? null : null,
+        strikes: invite.strikes,
+        time_zone: invite.time_zone,
         status: "offline",
         lastActiveAt: null,
         clientName: null,
@@ -194,7 +229,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       });
 
-      return res.status(200).json([...withLogins, ...shapedInvites]);
+      // Who has been invited is admin business, the same as who the admins are. This used to be
+      // enforced by the caller (Staff Orbital only asked for invitations when the viewer was an
+      // admin), which left User Management showing them to anyone.
+      return res.status(200).json(isAdmin ? [...withLogins, ...shapedInvites] : withLogins);
     } catch (e) {
       console.error("admin/users GET", e);
       return res.status(500).json({ message: "Internal Server Error" });

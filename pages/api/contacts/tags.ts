@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { asStr } from "@/lib/api/parsing";
+import { handleApiError } from "@/lib/api/guards";
+import { asStr, isUuid } from "@/lib/api/parsing";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
@@ -34,8 +35,8 @@ export default withAuth(async (req, res, session) => {
 
     if (req.method === "PUT") {
       const id = asStr(req.body?.id);
-      if (!id) {
-        res.status(400).json({ message: "Tag id is required." });
+      if (!id || !isUuid(id)) {
+        res.status(400).json({ message: "A valid tag id is required." });
         return;
       }
       const existing = await prisma.contactTag.findFirst({ where: { id, user_id: userId } });
@@ -56,8 +57,8 @@ export default withAuth(async (req, res, session) => {
 
     if (req.method === "DELETE") {
       const id = asStr(req.body?.id);
-      if (!id) {
-        res.status(400).json({ message: "Tag id is required." });
+      if (!id || !isUuid(id)) {
+        res.status(400).json({ message: "A valid tag id is required." });
         return;
       }
       await prisma.contactTag.deleteMany({ where: { id, user_id: userId } });
@@ -65,7 +66,6 @@ export default withAuth(async (req, res, session) => {
       return;
     }
   } catch (e) {
-    console.error("contacts/tags", req.method, e);
-    res.status(500).json({ message: "Failed to process tag request." });
+    handleApiError(res, `contacts/tags ${req.method}`, e, "Failed to process tag request.");
   }
 }, { methods: ["GET", "POST", "PUT", "DELETE"] });

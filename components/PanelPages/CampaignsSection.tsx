@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import PanelCombobox from "@/components/panel/PanelCombobox";
 import { FiPlus, FiX, FiCheck, FiTrash2 } from "react-icons/fi";
 import { Inter } from "next/font/google";
-import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
@@ -218,19 +218,20 @@ const CampaignsSection: React.FC = () => {
                   aria-label="Search campaigns"
                   className="min-w-0 flex-1 rounded-md border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0]/25"
                 />
-                <select
-                  value={campaignStatusFilter}
-                  onChange={(event) => setCampaignStatusFilter(event.target.value)}
-                  aria-label="Filter by status"
-                  className="rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0]/25"
-                >
-                  <option value="all">All statuses</option>
-                  {(Object.keys(STATUS_LABEL) as Campaign["status"][]).map((status) => (
-                    <option key={status} value={status}>
-                      {STATUS_LABEL[status]}
-                    </option>
-                  ))}
-                </select>
+                <div className="w-44 shrink-0">
+                  <PanelCombobox
+                    aria-label="Filter by status"
+                    value={campaignStatusFilter}
+                    onChange={setCampaignStatusFilter}
+                    options={[
+                      { value: "all", label: "All statuses" },
+                      ...(Object.keys(STATUS_LABEL) as Campaign["status"][]).map((status) => ({
+                        value: status,
+                        label: STATUS_LABEL[status],
+                      })),
+                    ]}
+                  />
+                </div>
               </div>
 
               <div className="overflow-hidden rounded-2xl border border-[#ECEAF1] bg-white">
@@ -397,10 +398,9 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
 
-  const canClose = useDraftGuard(Boolean(name || campaignId), "campaign wizard", "email", saving);
   const closeWizard = () => {
     if (mutationPending.current) return;
-    void (async () => { if (await canClose()) onClose(); })();
+    onClose();
   };
 
   // Lazy: only fetch Brevo's sender list once someone actually picks that provider, so a
@@ -686,25 +686,24 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
             <label className="block text-sm font-medium text-[#374151] mb-2">
               {sendProvider === "internal" ? "Sender Account" : "Sender Account (optional)"}
             </label>
-            <select
+            <PanelCombobox
+              aria-label="Sender Account"
               value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-            >
-              <option value="">Select a connected mailbox…</option>
-              {accounts.length > 0 && (
-                <optgroup label="Connected mailboxes">
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.accountEmail}</option>
-                  ))}
-                </optgroup>
-              )}
-              <optgroup label="Testing only">
-                {MOCK_ACCOUNTS.map((a) => (
-                  <option key={a.id} value={a.id}>{a.accountEmail}</option>
-                ))}
-              </optgroup>
-            </select>
+              onChange={setAccountId}
+              placeholder="Select a connected mailbox…"
+              options={[
+                ...accounts.map((a) => ({
+                  value: a.id,
+                  label: a.accountEmail,
+                  group: "Connected mailboxes",
+                })),
+                ...MOCK_ACCOUNTS.map((a) => ({
+                  value: a.id,
+                  label: a.accountEmail,
+                  group: "Testing only",
+                })),
+              ]}
+            />
             {isMockAccountId(accountId) && (
               <p className="mt-2 text-xs text-amber-600">
                 Mock account — this campaign won&apos;t be saved and won&apos;t appear in your campaigns list.
@@ -717,20 +716,16 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
               {brevoSendersError ? (
                 <p className="text-xs text-red-600">{brevoSendersError}</p>
               ) : (
-                <select
+                <PanelCombobox
+                  aria-label="Sender Email"
                   value={senderEmail}
-                  onChange={(e) => setSenderEmail(e.target.value)}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                >
-                  <option value="">
-                    {brevoSenders.length === 0 ? "Loading senders…" : "Select a Brevo sender…"}
-                  </option>
-                  {brevoSenders.map((s) => (
-                    <option key={s.email} value={s.email}>
-                      {s.email} {s.active ? "" : "(not verified yet)"}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSenderEmail}
+                  placeholder={brevoSenders.length === 0 ? "Loading senders…" : "Select a Brevo sender…"}
+                  options={brevoSenders.map((s) => ({
+                    value: s.email,
+                    label: s.active ? s.email : `${s.email} (not verified yet)`,
+                  }))}
+                />
               )}
               <p className="mt-2 text-xs text-[#9CA3AF]">
                 Pulled from your Brevo account&apos;s registered senders. Unverified ones will still send but land
@@ -761,16 +756,13 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
           <div className="border border-dashed border-[#E5E7EB] rounded-lg p-4 space-y-3">
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-2">Template</label>
-              <select
+              <PanelCombobox
+                aria-label="Template"
                 value={newStepTemplateId}
-                onChange={(e) => setNewStepTemplateId(e.target.value)}
-                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-              >
-                <option value="">Select a template…</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+                onChange={setNewStepTemplateId}
+                placeholder="Select a template…"
+                options={templates.map((t) => ({ value: t.id, label: t.name }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-2">Delay Before Sending</label>

@@ -1,9 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { addLeadsToCampaign, type SmartleadLead } from "@/lib/campaigns/smartlead/client";
 import { mapInBatches } from "@/lib/batch";
+import { isUuid } from "@/lib/api/parsing";
 
 type AudienceFilter = {
   tagIds?: string[];
+  /** Individually-picked contacts, additive with tagIds (a union, not a replacement) — someone
+   *  you want in this campaign regardless of how their tags happen to be set up. */
+  contactIds?: string[];
 };
 
 /**
@@ -100,12 +104,23 @@ export async function syncCampaignAudience(campaignId: string): Promise<{ enroll
   });
 
   const filter = (campaign.audience_filter as AudienceFilter | null) ?? {};
-  const tagIds = Array.isArray(filter.tagIds) ? filter.tagIds.filter((v): v is string => typeof v === "string") : [];
+  // contacts.id / contact_tags.id are @db.Uuid columns — a malformed entry would otherwise make
+  // the `{ in: ... }` filters below throw (P2007). audience_filter is stored JSON, not
+  // schema-validated, so this defends against stale/dirty rows even though the write path
+  // (pages/api/campaigns/[id]/audience.ts) now also filters to valid UUIDs before saving.
+  const tagIds = Array.isArray(filter.tagIds) ? filter.tagIds.filter((v): v is string => typeof v === "string" && isUuid(v)) : [];
+  const contactIds = Array.isArray(filter.contactIds)
+    ? filter.contactIds.filter((v): v is string => typeof v === "string" && isUuid(v))
+    : [];
 
   const where: any = { company_id: campaign.company_id };
-  if (tagIds.length > 0) {
-    where.contact_tag_assignments = { some: { tag_id: { in: tagIds } } };
-  }
+  // Both are optional narrowing, combined as a union: picking a tag or an individual contact (or
+  // both) means "at least one of these", not "all of these" — leaving both empty is what keeps
+  // the existing "enroll everyone in the company" default.
+  const orConditions: any[] = [];
+  if (tagIds.length > 0) orConditions.push({ contact_tag_assignments: { some: { tag_id: { in: tagIds } } } });
+  if (contactIds.length > 0) orConditions.push({ id: { in: contactIds } });
+  if (orConditions.length > 0) where.OR = orConditions;
 
   const matches = await prisma.contact.findMany({
     where,

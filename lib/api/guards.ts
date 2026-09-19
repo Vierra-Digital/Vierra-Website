@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireSession } from "@/lib/auth";
+import { mapPrismaError } from "@/lib/api/prismaError";
 
 type SessionLike = Awaited<ReturnType<typeof requireSession>>;
 
@@ -46,6 +47,14 @@ export function requireMethodOrRespond405(
 
 export function handleApiError(res: NextApiResponse, scope: string, error: unknown, message = "Internal Server Error") {
   if (error instanceof Error && error.message === "__handled__") return;
+  // A Prisma error a route didn't specifically anticipate (bad id, name collision, stale
+  // reference, already-gone row) is a client-caused 4xx, not a server fault — answer it as one
+  // instead of a generic 500. Anything not covered by the mapper falls through to the 500 below.
+  const mapped = mapPrismaError(error);
+  if (mapped) {
+    res.status(mapped.status).json({ message: mapped.message });
+    return;
+  }
   console.error(scope, error);
   res.status(500).json({ message });
 }

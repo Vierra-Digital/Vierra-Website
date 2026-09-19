@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { FiSearch, FiZap, FiInbox, FiExternalLink, FiAlertTriangle } from "react-icons/fi";
+import PanelCombobox from "@/components/panel/PanelCombobox";
 import type { CartographySearchResult } from "@/pages/api/cartography/search";
 import type { CartographyLocation } from "@/pages/api/cartography/locations";
 import ReviewQueue from "@/components/PanelPages/CartographySection/ReviewQueue";
 import { companyUrl } from "@/lib/cartography/companyUrl";
 import { panelFetch } from "@/lib/panelFetch";
+import { useActiveClient } from "@/lib/activeClient";
 
 // Shape of a /prospect job's payload once it reaches a terminal status, as cached by
 // pages/api/prospect/callback.ts and served by pages/api/prospect/[jobId].ts. Every value on a
@@ -91,6 +93,38 @@ const CartographySection: React.FC = () => {
       })
       .catch(() => {
         if (!cancelled) setReferenceLocations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Whose brand universe agent-mode runs seek leads on behalf of. Backed by the same
+  // localStorage-shared context panelFetch reads (lib/activeClient.tsx) — not a Cartography-local
+  // choice, since switching it here has to mean the same thing everywhere else that scopes by the
+  // active client. An empty value clears it, which is what makes "Vierra" the default: with
+  // nothing set, every panelFetch call (including this one) already resolves to the staff
+  // member's own session, which is always Vierra's fixed company (see lib/api/targetCompany.ts).
+  const { activeClient, setActiveClient } = useActiveClient();
+  const [clientOptions, setClientOptions] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/clients")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: { companyId: string; businessName: string; name: string }[]) => {
+        if (cancelled || !Array.isArray(data)) return;
+        // The picker is scoped to companies, not client contacts — a company with several client
+        // rows (see lib/api/billingClient.ts's own reasoning for this exact ambiguity) would
+        // otherwise show one entry per contact, all resolving to the same companyId.
+        const byCompany = new Map<string, string>();
+        for (const c of data) {
+          if (!byCompany.has(c.companyId)) byCompany.set(c.companyId, c.businessName || c.name);
+        }
+        setClientOptions(Array.from(byCompany, ([id, name]) => ({ id, name })));
+      })
+      .catch(() => {
+        if (!cancelled) setClientOptions([]);
       });
     return () => {
       cancelled = true;
@@ -248,6 +282,45 @@ const CartographySection: React.FC = () => {
     );
   }
 
+  // Artemis's `reasons` strings are its own internal scoring log format ("MISS industry w=1.00
+  // 0.28 similarity", "UNKNOWN industry w=1.00 the company's site does not say") -- readable to
+  // whoever tuned the matcher, not to the staff member deciding whether to trust this candidate.
+  // Parsed into plain language where the shape is recognized; anything unrecognized (a format
+  // Artemis hasn't sent us before) falls back to the raw string unchanged rather than mangling it.
+  function humanizeReason(raw: string): string {
+    const match = raw.match(/^(HIT|MISS|UNKNOWN)\s+(\w+)\s+w=[\d.]+\s*(.*)$/i);
+    if (!match) return raw;
+    const [, verdict, field, detail] = match;
+    const fieldLabel = field.charAt(0).toUpperCase() + field.slice(1);
+    const verdictPhrase =
+      verdict.toUpperCase() === "HIT"
+        ? `${fieldLabel} matches`
+        : verdict.toUpperCase() === "MISS"
+        ? `${fieldLabel} doesn't match your target`
+        : `${fieldLabel} unknown`;
+    const detailTrimmed = detail.trim();
+    if (!detailTrimmed) return verdictPhrase;
+    const similarityMatch = detailTrimmed.match(/^([\d.]+)\s*similarity$/i);
+    if (similarityMatch) {
+      return `${verdictPhrase} — ${Math.round(parseFloat(similarityMatch[1]) * 100)}% similarity`;
+    }
+    return `${verdictPhrase} — ${detailTrimmed}`;
+  }
+
+  // Artemis's own confidence score already weighs industry into `components.confidence`, but an
+  // explicit "MISS industry" (stated and wrong) or "UNKNOWN industry" (never stated) reason was
+  // still landing at e.g. 41% -- Partial Match territory -- even at a low underlying similarity.
+  // The actual scoring happens in Artemis, a separate service this repo has no access to; this
+  // only makes the UI reflect an industry problem more harshly than the raw number alone does.
+  // MISS is penalized harder than UNKNOWN -- a stated-and-wrong industry is worse than one the
+  // company's own site just never mentioned.
+  function industryConfidencePenalty(reasons: string[] | undefined): number {
+    const reason = reasons?.[0] || "";
+    if (/^MISS\s+industry\b/i.test(reason)) return 0.5;
+    if (/^UNKNOWN\s+industry\b/i.test(reason)) return 0.75;
+    return 1;
+  }
+
   // Confidence counts unknown attributes against it (see the title on ConfidenceBadge below) --
   // the three tiers below exist so a glance at the color tells the story match_ratio and
   // confidence together are meant to: "everything checked out" (high) vs "some things couldn't
@@ -264,14 +337,27 @@ const CartographySection: React.FC = () => {
     return "low";
   }
 
-  function ConfidenceBadge({ confidence, matchRatio }: { confidence?: number; matchRatio?: number }) {
+  function ConfidenceBadge({
+    confidence,
+    matchRatio,
+    rawConfidence,
+  }: {
+    confidence?: number;
+    matchRatio?: number;
+    /** Artemis's own number, before industryConfidencePenalty. Shown in the tooltip when it differs. */
+    rawConfidence?: number;
+  }) {
     if (typeof confidence !== "number") return null;
     const tier = confidenceTier(confidence);
     const style = CONFIDENCE_TIER_STYLE[tier];
+    const wasAdjusted = typeof rawConfidence === "number" && Math.round(rawConfidence * 100) !== Math.round(confidence * 100);
+    const title = wasAdjusted
+      ? `Lowered for an industry match issue — Artemis reported ${Math.round(rawConfidence! * 100)}%. confidence counts unknowns against it; match_ratio only counts what was actually verified`
+      : "confidence counts unknowns against it; match_ratio only counts what was actually verified";
     return (
       <div
         className={`flex shrink-0 flex-col items-end gap-1 rounded-xl px-3 py-2 ring-1 ${style.chip} ${style.ring}`}
-        title="confidence counts unknowns against it; match_ratio only counts what was actually verified"
+        title={title}
       >
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide">
           <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
@@ -289,11 +375,35 @@ const CartographySection: React.FC = () => {
     <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-y-auto">
       <div className="flex-1 flex justify-center px-6 pb-10">
         <div className="mx-auto w-full max-w-[1680px] flex flex-col">
-          <div className="pt-8 pb-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-[#111827]">Cartography</h1>
-            <p className="mt-1 text-sm text-[#6B7280]">
-              Lead sourcing — search the existing pool, or describe a target and let an agent go find one.
-            </p>
+          <div className="pt-8 pb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#111827]">Cartography</h1>
+              <p className="mt-1 text-sm text-[#6B7280]">
+                Lead sourcing — search the existing pool, or describe a target and let an agent go find one.
+              </p>
+            </div>
+            {/* Search reads the shared pool regardless of this — only agent-mode runs are scoped
+                to one client's brand universe. Shown here anyway rather than hidden per-mode: it
+                is easy to switch modes without noticing which client is still selected. */}
+            <div className="w-56 shrink-0">
+              <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
+                Agent Seeks Leads For
+              </label>
+              <PanelCombobox
+                tone="dark"
+                aria-label="Client the agent seeks leads for"
+                value={activeClient?.id ?? ""}
+                onChange={(value) => {
+                  const picked = clientOptions.find((c) => c.id === value);
+                  setActiveClient(picked ? { id: picked.id, name: picked.name } : null);
+                }}
+                placeholder="Vierra"
+                options={[
+                  { value: "", label: "Vierra (default)" },
+                  ...clientOptions.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
           </div>
 
           {/* Discover finds candidates; Review Queue is where they get turned into real
@@ -386,32 +496,35 @@ const CartographySection: React.FC = () => {
             </div>
             {mode === "search" ? (
               <>
-                <select
-                  value={centerCity}
-                  onChange={(event) => setCenterCity(event.target.value)}
-                  aria-label="Filter by distance from city"
-                  className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0]/25"
-                >
-                  <option value="">Any location</option>
-                  {referenceLocations.map((c) => (
-                    <option key={c.location} value={c.location}>
-                      {c.location} ({c.count})
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={radiusMiles}
-                  onChange={(event) => setRadiusMiles(Number(event.target.value))}
-                  disabled={!centerCity}
-                  aria-label="Distance radius"
-                  className="shrink-0 rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0]/25 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {RADIUS_OPTIONS_MILES.map((mi) => (
-                    <option key={mi} value={mi}>
-                      within {mi} mi
-                    </option>
-                  ))}
-                </select>
+                <div className="w-48 shrink-0">
+                  <PanelCombobox
+                    tone="dark"
+                    aria-label="Filter by distance from city"
+                    value={centerCity}
+                    onChange={setCenterCity}
+                    placeholder="Any location"
+                    options={[
+                      { value: "", label: "Any location" },
+                      ...referenceLocations.map((c) => ({
+                        value: c.location,
+                        label: `${c.location} (${c.count})`,
+                      })),
+                    ]}
+                  />
+                </div>
+                <div className="w-36 shrink-0">
+                  <PanelCombobox
+                    tone="dark"
+                    aria-label="Distance radius"
+                    value={String(radiusMiles)}
+                    onChange={(value) => setRadiusMiles(Number(value))}
+                    disabled={!centerCity}
+                    options={RADIUS_OPTIONS_MILES.map((mi) => ({
+                      value: String(mi),
+                      label: `within ${mi} mi`,
+                    }))}
+                  />
+                </div>
               </>
             ) : null}
             <button
@@ -576,8 +689,12 @@ const CartographySection: React.FC = () => {
                             const city = c.geo?.city?.value;
                             const region = c.geo?.region?.value;
                             const contact = c.contacts?.[0];
-                            const confidence = c.raw?.components?.confidence;
+                            const rawConfidence = c.raw?.components?.confidence;
                             const matchRatio = c.raw?.components?.match_ratio;
+                            const confidence =
+                              typeof rawConfidence === "number"
+                                ? Math.max(0, Math.min(1, rawConfidence * industryConfidencePenalty(c.raw?.reasons)))
+                                : undefined;
                             const tier = typeof confidence === "number" ? confidenceTier(confidence) : null;
                             return (
                               <div
@@ -604,7 +721,7 @@ const CartographySection: React.FC = () => {
                                     <BasisTag basis={c.name.basis} />
                                   </div>
                                   <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">
-                                    {c.raw?.reasons?.[0] || "—"}
+                                    {c.raw?.reasons?.[0] ? humanizeReason(c.raw.reasons[0]) : "—"}
                                   </p>
                                   <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[#F1EFF6] pt-2.5 text-xs text-[#6B7280]">
                                     <span className="inline-flex items-center gap-1">
@@ -618,7 +735,7 @@ const CartographySection: React.FC = () => {
                                     <span>{[city, region].filter(Boolean).join(", ") || "—"}</span>
                                   </div>
                                 </div>
-                                <ConfidenceBadge confidence={confidence} matchRatio={matchRatio} />
+                                <ConfidenceBadge confidence={confidence} matchRatio={matchRatio} rawConfidence={rawConfidence} />
                               </div>
                             );
                           })}

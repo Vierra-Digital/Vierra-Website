@@ -8,6 +8,7 @@ export async function campaignPreflight(campaign: { id: string; company_id: stri
   ]);
   const blockers: string[] = [];
   if (!steps) blockers.push("Add at least one sequence step before launching.");
+  if (!audience) blockers.push("Enroll at least one contact before launching — this audience filter currently matches nobody.");
   if (campaign.send_provider === "internal") {
     if (!company?.mailing_address?.trim()) blockers.push("Add the company's mailing address in Email Settings > Campaign sending.");
     const site = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");

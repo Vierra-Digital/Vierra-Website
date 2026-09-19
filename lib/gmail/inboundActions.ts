@@ -362,6 +362,12 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<Reply
       note: "Auto-updated from an inbound reply.",
     },
   });
+  // This function only reaches here for a genuine inbound reply matched to a campaign contact
+  // (the two early returns above are the "not a reply" cases), so every call is exactly one real
+  // reply — same daily counter the Smartlead webhook already bumps on its own reply event
+  // (pages/api/campaigns/webhooks/smartlead.ts), just previously missing for internal-provider
+  // campaigns. pages/api/campaigns/[id]/stats.ts's reply rate is derived from this.
+  await bumpCampaignStat(contact.campaign_id, "replies");
 
   // An auto-classified unsubscribe should actually stop future contact, same as the manual
   // remove_contact categorization path (pages/api/campaigns/[id]/contacts/[contactId].ts) —

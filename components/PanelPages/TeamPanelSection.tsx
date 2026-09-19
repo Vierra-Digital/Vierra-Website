@@ -6,6 +6,12 @@ import { inter } from "@/lib/fonts";
 import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+// The house form styling, shared with the client dialog so the two cannot drift apart.
+import {
+    PANEL_FIELD as FIELD,
+    PANEL_FIELD_INVALID as FIELD_INVALID,
+    PanelFieldSelect as FieldSelect,
+} from "@/components/ui/PanelForm";
 import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
 import {
@@ -71,6 +77,8 @@ interface TeamRow {
     country: string
     company_email: string | null
     mentor: string | null
+    /** Resolved for display; `mentor` stays the id the edit dialog preselects with. */
+    mentorName: string | null
     time_zone: string | null
     /**
      * The count, not the "2/3" label. It was typed as a string while the API sends the integer
@@ -127,6 +135,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
+    const [rescindError, setRescindError] = useState("")
+    const [updateError, setUpdateError] = useState("")
+    const [rescinding, setRescinding] = useState(false)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -199,8 +210,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     }
 
     const confirmRescindInvite = async () => {
-        if (!inviteToRescind) return
-
+        if (!inviteToRescind || rescinding) return
+        setRescinding(true)
+        setRescindError("")
         try {
             const response = await fetch(`/api/admin/invitations/${inviteToRescind.id}`, {
                 method: "DELETE",
@@ -210,11 +222,15 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 throw new Error("Failed to rescind invite")
             }
             setRows(prev => prev.filter(r => r.id !== inviteToRescind.id))
+            // Closed only on success — a failure leaves the dialog up so the reason in it can be
+            // read, which a finally block closing unconditionally would not allow.
             setShowRescindModal(false)
             setInviteToRescind(null)
         } catch (error) {
             console.error("Error rescinding invite:", error)
-            alert("Failed to rescind invite. Please try again.")
+            setRescindError(`Could not rescind the invite for ${inviteToRescind.email}. Try again.`)
+        } finally {
+            setRescinding(false)
         }
     }
 
@@ -234,14 +250,21 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             if (!response.ok) {
                 throw new Error("Failed to update staff member")
             }
-            setRows(prev => prev.map(r => 
-                r.id === selectedStaff.id ? { ...r, ...updatedData } : r
-            ))
+            /**
+             * Reloaded rather than merged into the row we already have.
+             *
+             * The merge wrote back exactly the fields that were sent, and Mentor is not one of
+             * them: the dialog sends mentor_id, while the column renders the name the API resolves
+             * from it. Saving a mentor therefore changed nothing on screen until the next refetch,
+             * which read as the field not working at all. Reloading also means what the table
+             * shows is what was actually stored, rather than what we hoped would be.
+             */
+            await loadTeamData()
             setShowManageModal(false)
             setSelectedStaff(null)
         } catch (error) {
             console.error("Error updating staff:", error)
-            alert("Failed to update staff member. Please try again.")
+            setUpdateError("Could not save those changes. Try again.")
         }
     }
 
@@ -257,63 +280,47 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             const res = await fetch("/api/admin/users")
             if (!res.ok) throw new Error("Failed to fetch team data")
             const data = await res.json()
+            /**
+             * One request, one row per person. /api/admin/users already returns unaccepted
+             * invitations alongside the memberships, tagged with pendingInvite and reported as
+             * staff — so filtering on role alone let every invite through as though it were a
+             * colleague, and the separate /api/admin/invitations call then added the same person
+             * a second time. An invited teammate appeared twice, once looking established.
+             */
             const teamOnly = (data as any[]).filter((u: any) => u.role === "admin" || u.role === "staff")
-            const shaped: TeamRow[] = teamOnly.map((u: any) => ({
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                image: u.image,
-                imageVersion: u.imageVersion,
-                position: u.position,
-                country: u.country,
-                company_email: u.company_email,
-                mentor: u.mentor,
-                strikes: typeof u.strikes === "number" ? u.strikes : 0,
-                time_zone: u.time_zone,
-                status: u.status,
-                lastActiveAt: u.lastActiveAt,
-                isPending: false,
-                isSelf: u.isSelf,
-            }))
-
-            let pendingRows: TeamRow[] = []
-            if (userRole === "admin") {
-                try {
-                    const invRes = await fetch("/api/admin/invitations")
-                    if (invRes.ok) {
-                        const invitations = await invRes.json()
-                        pendingRows = (invitations as any[]).map((inv: any) => ({
-                            id: inv.id,
-                            // The invite carries what the inviter filled in, so a pending row reads
-                            // like the rest of the table rather than repeating the email twice and
-                            // showing a dash where real answers exist. The Pending badge is what
-                            // marks it, not a placeholder in every column.
-                            name: [inv.first_name, inv.last_name].filter(Boolean).join(" ") || inv.email,
-                            email: inv.email,
-                            image: null,
-                            position: inv.position || "Invited",
-                            country: "—",
-                            company_email: null,
-                            mentor: null,
-                            time_zone: inv.time_zone || null,
-                            strikes: null,
-                            status: "pending",
-                            lastActiveAt: null,
-                            isPending: true,
-                        }))
-                    }
-                } catch (e) {
-                    console.warn("Failed to load pending invitations:", e)
+            const shaped: TeamRow[] = teamOnly.map((u: any) => {
+                const pending = Boolean(u.pendingInvite)
+                return {
+                    // The invite's own id, so rescinding has something to address.
+                    id: pending ? u.pendingInvite.id : u.id,
+                    name: u.name || u.email,
+                    email: u.email,
+                    image: u.image,
+                    imageVersion: u.imageVersion,
+                    position: u.position,
+                    country: u.country,
+                    company_email: u.company_email,
+                    mentor: u.mentor,
+                    mentorName: u.mentorName ?? null,
+                    // The invite carries the strike count the inviter set, so a pending row shows
+                    // it rather than a dash — blanking it was hiding an answer that had been given.
+                    strikes: typeof u.strikes === "number" ? u.strikes : pending ? null : 0,
+                    time_zone: u.time_zone,
+                    status: pending ? "pending" : u.status,
+                    lastActiveAt: pending ? null : u.lastActiveAt,
+                    isPending: pending,
+                    isSelf: u.isSelf,
                 }
-            }
+            })
 
-            setRows([...pendingRows, ...shaped])
+            // Invites first, so a new one is visible without hunting for it.
+            setRows([...shaped.filter((r) => r.isPending), ...shaped.filter((r) => !r.isPending)])
         } catch (error) {
             console.error("Error loading team data:", error)
         } finally {
         setLoading(false)
         }
-    }, [userRole])
+    }, [])
 
     /**
      * The rows the table shows. Derived, not stored.
@@ -388,7 +395,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     useEffect(() => {
         // Loading the team on mount; the loader flips its own loading state after awaiting.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTeamData()
     }, [loadTeamData])
 
@@ -541,7 +547,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         header: "Time Zone",
                         cell: (r) => (r.time_zone ? timeZoneLabel(r.time_zone) : <PanelEmptyCell />),
                     },
-                    { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
+                    { key: "mentor", header: "Mentor", cell: (r) => r.mentorName || <PanelEmptyCell /> },
                     {
                         key: "strikes",
                         header: "Strikes",
@@ -592,6 +598,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
             {showManageModal && selectedStaff && userRole === "admin" && (
                 <ManageStaffModal
+                    saveError={updateError}
                     staff={selectedStaff}
                     mentorOptions={rows
                         .filter((r) => !r.isPending)
@@ -639,16 +646,24 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     title="Rescind Invite"
                     message={
                         <>
-                            Are you sure you want to rescind the invite for{" "}
-                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? They
-                            will no longer be able to use this invite to join the team.
+                            Rescind the invite for{" "}
+                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? The
+                            link they were sent will stop working and they will not be able to join.
+                            {rescindError && (
+                                <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                    {rescindError}
+                                </span>
+                            )}
                         </>
                     }
                     confirmLabel="Rescind Invite"
+                    busy={rescinding}
+                    busyLabel="Rescinding…"
                     danger={false}
                     onCancel={() => {
                         setShowRescindModal(false)
                         setInviteToRescind(null)
+                        setRescindError("")
                     }}
                     onConfirm={confirmRescindInvite}
                 />
@@ -656,26 +671,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         </PanelPage>
     )
 }
-const FIELD_BASE =
-    "h-9 w-full rounded-[10px] px-3 text-[13px] text-[#111827] ring-1 ring-inset transition-shadow focus:outline-none"
-const FIELD = `${FIELD_BASE} bg-[#F4F2F8] ring-transparent focus:bg-white focus:ring-[#701CC0]/35`
-/** Same field, flagged. Built from the same base rather than rewritten, which is how the colour
- *  went missing the first time. */
-const FIELD_INVALID = `${FIELD_BASE} bg-red-50 ring-red-300 focus:ring-red-400`
-
-/** Select in the panel's field styling, with our chevron rather than the platform's. */
-const FieldSelect: React.FC<{
-    value: string
-    onChange: (value: string) => void
-    children: React.ReactNode
-}> = ({ value, onChange, children }) => (
-    <span className="relative block">
-        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${FIELD} appearance-none pr-9`}>
-            {children}
-        </select>
-        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden />
-    </span>
-)
 
 const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
 
@@ -799,13 +794,51 @@ const InviteTeammateModal: React.FC<{
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
+    /**
+     * null while nothing has been asked yet or an answer is in flight. Send Invite stays disabled
+     * until the address comes back free, so a taken one simply never enables the button — saying
+     * "that person already has an account" out loud would confirm who works here to anyone who can
+     * open this dialog.
+     */
+    const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null)
 
-    // Everything but the mentor has to be answered. Strikes always holds a value, so it is the
-    // name, email, position and time zone that decide whether the invite can go.
+    useEffect(() => {
+        // Clearing the previous answer is the point of the effect: an address being retyped must
+        // not keep Send Invite enabled on the strength of the last one that checked out.
+        /* eslint-disable react-hooks/set-state-in-effect */
+        if (!isValidEmail(email)) {
+            setEmailAvailable(null)
+            return
+        }
+        // Debounced: this fires per keystroke otherwise, and the answer only matters once typing
+        // has settled. `cancelled` stops a slow reply for an older address landing on a newer one.
+        let cancelled = false
+        setEmailAvailable(null)
+        /* eslint-enable react-hooks/set-state-in-effect */
+        const timer = window.setTimeout(() => {
+            void fetch(`/api/admin/invitations/available?email=${encodeURIComponent(email)}`)
+                .then((response) => (response.ok ? response.json() : { available: false }))
+                .then((body) => {
+                    if (!cancelled) setEmailAvailable(Boolean(body?.available))
+                })
+                .catch(() => {
+                    if (!cancelled) setEmailAvailable(false)
+                })
+        }, 350)
+        return () => {
+            cancelled = true
+            window.clearTimeout(timer)
+        }
+    }, [email])
+
+    // Everything but the mentor has to be answered, and the address has to be free. Strikes
+    // always holds a value, so it is the name, email, position and time zone that decide whether
+    // the invite can go.
     const canSubmit =
         firstName.trim() !== "" &&
         lastName.trim() !== "" &&
         isValidEmail(email) &&
+        emailAvailable === true &&
         position !== "" &&
         timeZone !== ""
 
@@ -938,12 +971,15 @@ const InviteTeammateModal: React.FC<{
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Position <span className="text-[#B42318]">*</span>
                         </label>
-                        <FieldSelect value={position} onChange={setPosition}>
-                            <option value="">Not set</option>
-                            {POSITION_OPTIONS.map((option) => (
-                                <option key={option} value={option}>{option}</option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Position"
+                            value={position}
+                            onChange={setPosition}
+                            options={[
+                                { value: "", label: "Not Set" },
+                                ...POSITION_OPTIONS.map((option) => ({ value: option, label: option })),
+                            ]}
+                        />
                     </div>
                     <div>
                         {/* A picker, not the free-text box the edit dialog still uses: the column is a
@@ -951,35 +987,46 @@ const InviteTeammateModal: React.FC<{
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
                         </label>
-                        <FieldSelect value={mentorId} onChange={setMentorId}>
-                            <option value="">None</option>
-                            {mentorOptions.map((option) => (
-                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Mentor"
+                            value={mentorId}
+                            onChange={setMentorId}
+                            options={[
+                                { value: "", label: "None" },
+                                ...mentorOptions.map((option) => ({
+                                    value: option.id,
+                                    label: option.name || option.email,
+                                })),
+                            ]}
+                        />
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Strikes <span className="text-[#B42318]">*</span>
                         </label>
-                        <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
-                            {[0, 1, 2, 3].map((n) => (
-                                <option key={n} value={n}>{n}/3</option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Strikes"
+                            value={String(strikes)}
+                            onChange={(value) => setStrikes(Number(value))}
+                            options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: `${n}/3` }))}
+                        />
                     </div>
-                    <div className="sm:col-span-2">
+                    <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Time Zone <span className="text-[#B42318]">*</span>
                         </label>
-                        <FieldSelect value={timeZone} onChange={setTimeZone}>
-                            <option value="">Select A Time Zone</option>
-                            {TIME_ZONE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {timeZoneLabel(option.value)}
-                                </option>
-                            ))}
-                        </FieldSelect>
+                        <FieldSelect
+                            aria-label="Time Zone"
+                            value={timeZone}
+                            onChange={setTimeZone}
+                            options={[
+                                { value: "", label: "Select A Time Zone" },
+                                ...TIME_ZONE_OPTIONS.map((option) => ({
+                                    value: option.value,
+                                    label: timeZoneLabel(option.value),
+                                })),
+                            ]}
+                        />
                     </div>
                 </div>
 
@@ -1014,10 +1061,11 @@ const InviteTeammateModal: React.FC<{
  */
 const ManageStaffModal: React.FC<{
     staff: TeamRow
+    saveError?: string
     mentorOptions: Array<{ id: string; name: string; email: string }>
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
-}> = ({ staff, mentorOptions, onClose, onUpdate }) => {
+}> = ({ staff, saveError = "", mentorOptions, onClose, onUpdate }) => {
     const [firstName, setFirstName] = useState(() => splitName(staff.name || "").first)
     const [lastName, setLastName] = useState(() => splitName(staff.name || "").last)
     const [email, setEmail] = useState(staff.email || "")
@@ -1107,50 +1155,63 @@ const ManageStaffModal: React.FC<{
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Position <span className="text-[#B42318]">*</span>
                     </label>
-                    <FieldSelect value={position} onChange={setPosition}>
-                        <option value="">Not set</option>
-                        {POSITION_OPTIONS.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                        ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Position"
+                        value={position}
+                        onChange={setPosition}
+                        options={[
+                            { value: "", label: "Not Set" },
+                            ...POSITION_OPTIONS.map((option) => ({ value: option, label: option })),
+                        ]}
+                    />
                 </div>
                 <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
                     </label>
-                    <FieldSelect value={mentorId} onChange={setMentorId}>
-                        <option value="">None</option>
-                        {mentorOptions
-                            .filter((option) => option.id !== staff.id)
-                            .map((option) => (
-                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
-                            ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Mentor"
+                        value={mentorId}
+                        onChange={setMentorId}
+                        options={[
+                            { value: "", label: "None" },
+                            ...mentorOptions
+                                .filter((option) => option.id !== staff.id)
+                                .map((option) => ({ value: option.id, label: option.name || option.email })),
+                        ]}
+                    />
                 </div>
                 <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Strikes <span className="text-[#B42318]">*</span>
                     </label>
-                    <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
-                        {[0, 1, 2, 3].map((n) => (
-                            <option key={n} value={n}>{n}/3</option>
-                        ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Strikes"
+                        value={String(strikes)}
+                        onChange={(value) => setStrikes(Number(value))}
+                        options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: `${n}/3` }))}
+                    />
                 </div>
                 <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                         Time Zone <span className="text-[#B42318]">*</span>
                     </label>
-                    <FieldSelect value={timeZone} onChange={setTimeZone}>
-                        <option value="">Select A Time Zone</option>
-                        {TIME_ZONE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                                {timeZoneLabel(option.value)}
-                            </option>
-                        ))}
-                    </FieldSelect>
+                    <FieldSelect
+                        aria-label="Time Zone"
+                        value={timeZone}
+                        onChange={setTimeZone}
+                        options={[
+                            { value: "", label: "Select A Time Zone" },
+                            ...TIME_ZONE_OPTIONS.map((option) => ({
+                                value: option.value,
+                                label: timeZoneLabel(option.value),
+                            })),
+                        ]}
+                    />
                 </div>
             </div>
+
+            {saveError && <p className="mt-4 text-[13px] text-[#B42318]">{saveError}</p>}
 
             <div className="mt-6 flex justify-end gap-2">
                 <button

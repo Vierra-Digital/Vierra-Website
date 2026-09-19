@@ -27,15 +27,19 @@ export async function markCampaignContactMeetingBooked(campaignContactId: string
         campaign_id: true,
       },
     });
-    // Guard on the transition, not just presence, so a prospect who books a second meeting (or
-    // whose contact was already manually tagged) doesn't re-notify. Same shape as the manual
-    // PATCH endpoint's `existing.lead_status !== "meeting_booked"` guard.
-    if (!contact || contact.lead_status === "meeting_booked") return;
+    if (!contact) return;
 
-    await prisma.campaignContact.update({
-      where: { id: contact.id },
+    // Guarded on the transition, atomically — not "read lead_status, compare, then write" (this
+    // function is shared by two separate booking-confirmation call paths per the doc comment
+    // above, so two near-simultaneous calls for the same contact could both read the same stale
+    // row, both pass a plain equality check, and both write the event + fire the notification).
+    // Only the caller whose updateMany actually flips the row is allowed to log/notify.
+    const transitioned = await prisma.campaignContact.updateMany({
+      where: { id: contact.id, lead_status: { not: "meeting_booked" } },
       data: { lead_status: "meeting_booked" },
     });
+    if (transitioned.count === 0) return;
+
     await prisma.leadStatusEvent.create({
       data: {
         campaign_contact_id: contact.id,

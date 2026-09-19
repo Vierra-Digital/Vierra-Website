@@ -174,6 +174,7 @@ function UsersPanel() {
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
     const [resetResult, setResetResult] = useState<{ success: boolean; email: string | null } | null>(null)
+    const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string | null } | null>(null)
 
     // Session-side state, carried over wholesale from the view this page absorbed.
     const [expiring, setExpiring] = useState<boolean>(false)
@@ -322,21 +323,22 @@ function UsersPanel() {
         }
     }
 
-    const rescindInvite = async (inviteId: string) => {
+    const rescindInvite = async (inviteId: string, inviteEmail: string | null) => {
         setRescindingInvite(inviteId)
         setError("")
         try {
             const r = await fetch(`/api/admin/invitations/${encodeURIComponent(inviteId)}`, { method: "DELETE" })
             if (!r.ok) {
                 const body = await r.json().catch(() => ({}))
-                setError(body?.message || `Could not rescind the invite (HTTP ${r.status}).`)
+                setError(body?.message || `Could not rescind the invite for ${inviteEmail ?? "this address"}.`)
                 return
             }
             await load()
         } catch {
-            setError("Could not rescind the invite — the request failed.")
+            setError(`Could not rescind the invite for ${inviteEmail ?? "this address"} — the request failed.`)
         } finally {
             setRescindingInvite(null)
+            setInviteToRescind(null)
         }
     }
 
@@ -650,9 +652,9 @@ function UsersPanel() {
                                     alt={`${u.name || u.email || "User"}'s profile`}
                                 />
                                 <div className="min-w-0">
-                                    {/* An invitation has no name yet, and rendering an em-dash above the
-                                        address left the row's main line blank. The address becomes the
-                                        line when there is nothing else to put there. */}
+                                    {/* An invitation carries the name the inviter gave it, so it reads
+                                        like any other row. Older invites predate that and have none —
+                                        the address becomes the line rather than an em-dash over it. */}
                                     <div className="truncate font-medium text-[#111827]">{u.name || u.email || "—"}</div>
                                     {u.name && u.email ? (
                                         <div className="truncate text-[12px] text-[#6B7280]">{u.email}</div>
@@ -762,7 +764,7 @@ function UsersPanel() {
                                     )}
                                     {u.pendingInvite && (
                                         <RowActionMenuItem
-                                            onClick={() => rescindInvite(u.pendingInvite!.id)}
+                                            onClick={() => setInviteToRescind({ id: u.pendingInvite!.id, email: u.email })}
                                             disabled={rescindingInvite === u.pendingInvite.id}
                                             icon={<Trash2 className="w-4 h-4" />}
                                         >
@@ -808,6 +810,26 @@ function UsersPanel() {
                     setUserToDelete(null)
                     setDeleteError("")
                 }}
+            />
+
+            <ConfirmActionModal
+                isOpen={inviteToRescind !== null}
+                title="Rescind Invite"
+                message={
+                    <>
+                        Rescind the invite for{" "}
+                        <span className="font-semibold text-[#111827]">{inviteToRescind?.email || "this address"}</span>?
+                        The link they were sent will stop working and they will not be able to join.
+                    </>
+                }
+                confirmLabel="Rescind Invite"
+                busy={rescindingInvite !== null}
+                busyLabel="Rescinding…"
+                danger={false}
+                onConfirm={() => {
+                    if (inviteToRescind) void rescindInvite(inviteToRescind.id, inviteToRescind.email)
+                }}
+                onCancel={() => setInviteToRescind(null)}
             />
 
             <PasswordResetModal

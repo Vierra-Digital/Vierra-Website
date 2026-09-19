@@ -49,3 +49,17 @@ export function asPort(value: unknown, fallback: number): number {
 export function queryAccountEmail(value: string | string[] | undefined): string {
   return asQueryStr(value).toLowerCase();
 }
+
+/**
+ * Parses an optional date string for a `@db.Timestamptz` column. `ok: false` means the caller sent
+ * something that isn't a valid date — `new Date("banana")` doesn't throw, it silently produces an
+ * Invalid Date, and Prisma's own serializer is what throws (a raw RangeError, not a
+ * PrismaClientKnownRequestError) when that reaches a write — a genuine uncaught 500 that
+ * lib/api/prismaError.ts's mapper can't catch since it only recognizes Prisma's own error codes.
+ * An empty/absent string is valid input meaning "no date" (`value: null`), not an error.
+ */
+export function parseOptionalDate(raw: string): { ok: true; value: Date | null } | { ok: false } {
+  if (!raw) return { ok: true, value: null };
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? { ok: false } : { ok: true, value: date };
+}

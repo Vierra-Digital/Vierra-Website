@@ -1,0 +1,91 @@
+import type { NextApiRequest, NextApiResponse } from "next";
+import { prisma } from "@/lib/prisma";
+import { requireSession } from "@/lib/auth";
+import { resolveExplicitTargetCompanyId } from "@/lib/api/targetCompany";
+
+/**
+ * Everything the client overview shows, in one request.
+ *
+ * The three tabs are one screen, so they load together rather than firing a request each time
+ * someone switches tab — the payload is small and the alternative is three spinners for data that
+ * was already worth fetching.
+ *
+ * A representative always reads their own company and anything they send is ignored. A Vierra
+ * staff member names the client they are looking at; role model v2 lets any of them look at any
+ * client, so the parameter selects rather than authorises.
+ */
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
+  }
+  // requireSession rather than withAuth: this is one of the few routes a representative reads
+  // too, and withAuth resolves member sessions only.
+  const session = await requireSession(req, res);
+  if (!session) return;
+
+  {
+    // Someone signed in but not yet attached to a company has nothing to show.
+    if (session.kind === "unaffiliated") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    // This route reads exactly one client's data, so a staff member who hasn't picked a client
+    // must be told to, not silently land on Vierra's own company — see resolveExplicitTargetCompanyId
+    // (lib/api/targetCompany.ts).
+    const companyId = resolveExplicitTargetCompanyId(session, req);
+    if (!companyId) {
+      return res.status(400).json({ message: "companyId is required" });
+    }
+
+    try {
+      const campaignScope = { campaigns: { company_id: companyId } };
+      const [campaigns, leadCount, revenue] = await Promise.all([
+        prisma.campaign.findMany({
+          where: { company_id: companyId },
+          orderBy: [{ started_at: "desc" }, { created_at: "desc" }],
+          take: 100,
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            created_at: true,
+            started_at: true,
+            completed_at: true,
+            _count: { select: { campaign_contacts: true, campaign_steps: true } },
+          },
+        }),
+        prisma.campaignContact.count({ where: campaignScope }),
+        // Revenue is synced from Stripe onto stripe_invoices (see pages/api/stripe/webhook.ts),
+        // not finance_entries — its "revenue" kind was never written by anything, so this figure
+        // read a permanently-empty column before.
+        prisma.stripeInvoice.aggregate({
+          where: { company_id: companyId, status: "paid" },
+          _sum: { amount_paid_cents: true },
+        }),
+      ]);
+
+      return res.status(200).json({
+        analytics: {
+          campaigns: campaigns.length,
+          activeCampaigns: campaigns.filter((c) => c.status === "active" || c.status === "running")
+            .length,
+          leads: leadCount,
+          billedCents: revenue._sum.amount_paid_cents ?? 0,
+        },
+        campaigns: campaigns.map((c) => ({
+          id: c.id,
+          name: c.name,
+          status: c.status,
+          contacts: c._count.campaign_contacts,
+          steps: c._count.campaign_steps,
+          createdAt: c.created_at.toISOString(),
+          startedAt: c.started_at ? c.started_at.toISOString() : null,
+          completedAt: c.completed_at ? c.completed_at.toISOString() : null,
+        })),
+      });
+    } catch (e) {
+      console.error("client/overview GET", e);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+}

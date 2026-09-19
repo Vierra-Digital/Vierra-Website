@@ -1,7 +1,8 @@
 "use client"
 
 import React from "react"
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
+import PanelCombobox from "@/components/panel/PanelCombobox"
+import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 
 /**
  * The shared furniture for a panel list page — page header, toolbar controls, table card,
@@ -129,11 +130,14 @@ export const PANEL_FIELD =
   "h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
 
 /**
- * A select with our own chevron.
+ * The panel's dropdown.
  *
- * Left native, each select drew the platform's arrow at whatever inset the platform chose, so a
- * stack of them had arrows at different distances from the edge. `appearance-none` plus one
- * absolutely positioned icon puts every arrow in the same place.
+ * Drawn by PanelCombobox rather than by `<select>`. A native select's open list belongs to the
+ * operating system: it ignores the panel's radius, colours and font entirely, which is why a
+ * trigger that matched the fields beside it still opened something that looked like another
+ * product. Restyling the trigger could never reach the part people actually look at.
+ *
+ * The signature is unchanged, so every call site keeps working.
  */
 export const PanelSelect: React.FC<{
   label: string
@@ -141,34 +145,47 @@ export const PanelSelect: React.FC<{
   onChange: (value: string) => void
   options: Array<{ value: string; label: string }>
 }> = ({ label, value, onChange, options }) => (
-  <label className="mb-4 block last:mb-0">
+  <div className="mb-4 last:mb-0">
     <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">{label}</span>
-    <span className="relative block">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`${PANEL_FIELD} appearance-none pr-9`}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]"
-        aria-hidden
-      />
-    </span>
-  </label>
+    <PanelCombobox aria-label={label} value={value} onChange={onChange} options={options} />
+  </div>
 )
 
 /**
  * The table card. `overflow-hidden` is load-bearing: without it the white table spills over the
  * rounded corners and the radius only shows on the header strip.
  */
-export const PanelCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">{children}</div>
+/**
+ * The dashboard's stat tile, shared.
+ *
+ * The dashboard, the Marketing Tracker and Project Management all show a headline count above their
+ * detail, and each had drawn its own — a bordered white card, a figure on a purple gradient, a
+ * label-and-value row. One tile, so a number looks the same wherever it is read.
+ */
+export const PanelStat: React.FC<{
+  label: string
+  value: React.ReactNode
+  hint?: React.ReactNode
+}> = ({ label, value, hint }) => (
+  /* A column with the hint pushed to the bottom, because a row of these rarely all carry one —
+     Billing has a hint on three of four tiles, Analytics on one of four. The grid stretches every
+     tile to the tallest, so with the hint sitting straight after the value each one landed at a
+     different height and the row read as misaligned. mt-auto puts them all on one baseline; where
+     every tile has a hint (or none does) nothing moves. */
+  <div className="flex h-full flex-col rounded-xl bg-[#F1EFF6] px-4 py-4 transition-colors duration-150 hover:bg-[#EBE8F3]">
+    <h3 className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
+    <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-[#111827]">{value}</div>
+    {hint ? <div className="mt-auto pt-2 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
+  </div>
+)
+
+export const PanelCard: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className = "",
+}) => (
+  <div className={`overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white ${className}`}>
+    {children}
+  </div>
 )
 
 export const PanelTable: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -193,19 +210,31 @@ export const PanelTd: React.FC<{ children: React.ReactNode; className?: string }
   <td className={`px-5 py-4 text-[13px] text-[#111827] first:pl-6 last:pr-6 ${className}`}>{children}</td>
 )
 
+/**
+ * Takes rows, not cells — symmetric with PanelTbody, and deliberately so.
+ *
+ * This used to wrap its children in a `<tr>` of its own while PanelTbody did not. Four of the five
+ * call sites wrote `<PanelThead><PanelTr>…` anyway, matching the tbody they had just written, and
+ * produced `<tr><tr><th>…`. A nested row is invalid, and the browser's table fixup then sized the
+ * header cells independently of the body: on the billing tables the header strip came out 631px
+ * wide against a 1344px body, so no heading sat above its column.
+ *
+ * Requiring the row explicitly removes the asymmetry that caused it. A missing PanelTr is now
+ * visible in the markup rather than silently producing a second one.
+ */
 export const PanelThead: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <thead className="border-b border-[#E4E0EC] bg-[#F7F5FB]">
-    <tr>{children}</tr>
-  </thead>
+  <thead className="border-b border-[#E4E0EC] bg-[#F7F5FB]">{children}</thead>
 )
 
+/* The row hover lives here rather than on PanelTr, so it applies to data rows only — a header row
+   is the same PanelTr and should not light up under the cursor. */
 export const PanelTbody: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <tbody className="divide-y divide-[#EFECF4] bg-white">{children}</tbody>
+  <tbody className="divide-y divide-[#EFECF4] bg-white [&>tr]:transition-colors [&>tr:hover]:bg-[#F9F7FD]">
+    {children}
+  </tbody>
 )
 
-export const PanelTr: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <tr className="transition-colors hover:bg-[#F9F7FD]">{children}</tr>
-)
+export const PanelTr: React.FC<{ children: React.ReactNode }> = ({ children }) => <tr>{children}</tr>
 
 /** A muted em-dash, so an empty cell reads as "nothing here" rather than as a rendering fault. */
 export const PanelEmptyCell: React.FC = () => <span className="text-[#B9B4C6]">—</span>
@@ -414,11 +443,13 @@ export function PanelDataTable<T>({
     <PanelCard>
       <PanelTable>
         <PanelThead>
-          {columns.map((column) => (
-            <PanelTh key={column.key} className={column.align === "right" ? "!text-right" : ""}>
-              {column.header}
-            </PanelTh>
-          ))}
+          <PanelTr>
+            {columns.map((column) => (
+              <PanelTh key={column.key} className={column.align === "right" ? "!text-right" : ""}>
+                {column.header}
+              </PanelTh>
+            ))}
+          </PanelTr>
         </PanelThead>
         <PanelTbody>
           {visible.map((row) => (

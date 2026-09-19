@@ -136,6 +136,24 @@ export async function notifyCampaignCompleted(n: CampaignCompletedNotification):
   });
 }
 
+export type CampaignCancelledNotification = {
+  campaignId: string;
+  campaignName: string;
+  /** The status this campaign was cancelled from — draft, active, or paused — since "cancelled" alone doesn't say whether any mail ever went out. */
+  fromStatus: string;
+  contactCount: number;
+};
+
+/** Campaign-cancelled embed, used by the campaign status PATCH's -> cancelled transition (symmetric with notifyCampaignCompleted/Launched). */
+export async function notifyCampaignCancelled(n: CampaignCancelledNotification): Promise<void> {
+  await notifyDiscordEmbed({
+    author: { name: `🛑 Campaign cancelled — ${n.campaignName}`.slice(0, 240) },
+    url: panelUrl(`/panel/email?campaign=${n.campaignId}`),
+    description: `Cancelled from "${n.fromStatus}" · ${n.contactCount} contact${n.contactCount === 1 ? "" : "s"} enrolled`,
+    color: LEAD_STATUS_DISCORD_COLOR.not_interested,
+  });
+}
+
 export type CampaignLaunchedNotification = {
   campaignId: string;
   campaignName: string;

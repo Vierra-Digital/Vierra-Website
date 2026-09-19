@@ -295,19 +295,42 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
       if (event.data !== "stripe-connected") return;
       if (stripePollRef.current) clearInterval(stripePollRef.current);
       stripePollRef.current = null;
-      setStripeConnected(true);
-      setStripeLoading(false);
-      try {
-        const src = event.source as Window | null;
-        src?.close();
-      } catch {}
-      try { stripeWindowRef.current?.close(); } catch {}
-      stripeWindowRef.current = null;
+
+      const src = event.source as Window | null;
+      const closePopup = () => {
+        try { src?.close(); } catch {}
+        try { stripeWindowRef.current?.close(); } catch {}
+        stripeWindowRef.current = null;
+      };
+
+      // The popup posts this message and self-closes within ~200ms of Stripe's redirect — almost
+      // always well before Stripe's checkout.session.completed webhook reaches our server and
+      // persists client_billing.stripe_connected. Trusting the message alone let a client sail
+      // past this gate while the backend had no subscription id or payment method on file if the
+      // webhook was ever slow, retried, or dropped. Confirming via checkStripeStatus (which falls
+      // back to querying Stripe's paymentMethods directly and writing the flag itself) closes that
+      // gap instead of just believing the popup.
+      (async () => {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (await checkStripeStatus()) {
+            setStripeLoading(false);
+            closePopup();
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        // Stripe already redirected to our success URL, so the payment did go through even though
+        // we couldn't confirm it server-side after 5s — don't strand the client on this step.
+        console.error("Stripe connect: could not confirm stripe_connected after payment redirect");
+        setStripeConnected(true);
+        setStripeLoading(false);
+        closePopup();
+      })();
     };
 
     window.addEventListener("message", onStripeConnected);
     return () => window.removeEventListener("message", onStripeConnected);
-  }, []);
+  }, [checkStripeStatus]);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

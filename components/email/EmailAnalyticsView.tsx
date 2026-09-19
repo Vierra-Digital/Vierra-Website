@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FiClock, FiEye, FiMousePointer, FiSend, FiShield } from "react-icons/fi";
 import { panelFetch } from "@/lib/panelFetch";
+import { useActiveClient } from "@/lib/activeClient";
+import { useClientOptions } from "@/hooks/useClientOptions";
 
 type StatMessage = {
   messageId: string | null;
@@ -223,6 +225,11 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   const [domainAuth, setDomainAuth] = useState<DomainAuth[] | null>(null);
   const [postmaster, setPostmaster] = useState<PostmasterEntry[] | null>(null);
   const accountsKey = accounts.join(",");
+  const { activeClient, setActiveClient } = useActiveClient();
+  // Picking a client here scopes every section below to mail sent through THAT client's
+  // campaigns (the API attributes outbound mail to a client via its optional campaign_id — ad hoc
+  // sends with no campaign carry no client attribution, so they only ever show up in "All Clients").
+  const clientOptions = useClientOptions();
 
   useEffect(() => {
     let cancelled = false;
@@ -242,7 +249,11 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     // account row — which reads as "analytics is broken". Report on all of the user's sent mail.
     const qs = params.toString();
     panelFetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
-      .then((r) => r.json())
+      .then(async (r) => {
+        const payload = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(payload?.message || "Couldn't load analytics. Try again.");
+        return payload;
+      })
       .then((payload) => {
         if (cancelled) return;
         const n = (v: unknown) => Number(v || 0);
@@ -284,8 +295,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
           truncated: Boolean(payload?.truncated),
         });
       })
-      .catch(() => {
-        if (!cancelled) setError("Couldn't load analytics. Try again.");
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load analytics. Try again.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -293,7 +304,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     return () => {
       cancelled = true;
     };
-  }, [accountsKey, rangeDays]);
+  }, [accountsKey, rangeDays, activeClient?.id]);
 
   // Postmaster reputation is Google-published and independent of the date range, so it loads once.
   useEffect(() => {
@@ -340,7 +351,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeClient?.id]);
 
   const derived = useMemo(() => {
     const messages = data?.messages ?? [];
@@ -449,7 +460,29 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
           <h1 className="text-base font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
           <p className="truncate text-[13px] text-[#7B7691]">Outbound performance — mail you send, not mail you receive.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[#F4F2F8] p-0.5">
+        <div className="flex shrink-0 items-center gap-2">
+          <select
+            value={activeClient?.id ?? ""}
+            onChange={(e) => {
+              const id = e.target.value;
+              if (!id) {
+                setActiveClient(null);
+                return;
+              }
+              const client = clientOptions.find((c) => c.id === id);
+              if (client) setActiveClient(client);
+            }}
+            className="rounded-lg border border-[#E7E3EF] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1E1B2E] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/30"
+            title="Filters this report to mail sent through the selected client's campaigns. Ad hoc sends with no campaign only show up in All Clients."
+          >
+            <option value="">All Clients</option>
+            {clientOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <div className="flex items-center gap-0.5 rounded-lg bg-[#F4F2F8] p-0.5">
           {[
             { label: "30d", days: 30 },
             { label: "90d", days: 90 },
@@ -466,6 +499,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
               {opt.label}
             </button>
           ))}
+          </div>
         </div>
       </div>
 

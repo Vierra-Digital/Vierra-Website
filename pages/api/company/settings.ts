@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Company-wide CAN-SPAM settings: a physical mailing address (required in every commercial
@@ -11,7 +11,10 @@ import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
  * campaign. Company-wide (not per-user): every member of the company shares one address.
  */
 export default withAuth(async (req, res, session) => {
-  const companyId = resolveTargetCompanyId(session, req);
+  // This sets one client's CAN-SPAM address before their campaigns can send, so a staff member
+  // with no active client selected must be told to pick one, not silently edit Vierra's own —
+  // see resolveExplicitTargetCompanyId (lib/api/targetCompany.ts).
+  const companyId = resolveExplicitTargetCompanyId(session, req);
   if (!companyId) {
     res.status(400).json({ message: "companyId is required" });
     return;

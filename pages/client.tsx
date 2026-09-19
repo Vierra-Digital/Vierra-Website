@@ -6,7 +6,7 @@ import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
 import { getInitialUserProfile } from "@/lib/profileImage.server"
 import Link from "next/link"
-import { FiLogOut, FiFolder, FiUsers } from "react-icons/fi"
+import { FiLogOut, FiFolder, FiUsers, FiBarChart2, FiSend, FiCreditCard } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
 import { HiOutlineDocumentText } from "react-icons/hi"
 import { CiSearch } from "react-icons/ci"
@@ -26,6 +26,14 @@ const FilesSection = dynamic(() => import("@/components/PanelPages/FilesSection"
 })
 const LinkedInContextSection = dynamic(
   () => import("@/components/PanelPages/LinkedInContextSection"),
+  { ssr: false }
+)
+const ClientBillingSection = dynamic(
+  () => import("@/components/PanelPages/ClientBillingSection"),
+  { ssr: false }
+)
+const ClientOverviewSection = dynamic(
+  () => import("@/components/PanelPages/ClientOverviewSection"),
   { ssr: false }
 )
 const ClientTeamSection = dynamic(() => import("@/components/PanelPages/ClientTeamSection"), {
@@ -137,6 +145,21 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
                 Team
               </span>
             </div>
+            {([
+              [4, "Analytics", <FiBarChart2 key="a" />],
+              [5, "Campaign History", <FiSend key="c" />],
+              [6, "Billing", <FiCreditCard key="b" />],
+            ] as const).map(([section, label, icon]) => (
+              <div
+                key={section}
+                id="panel-nav-item"
+                onClick={() => { setCurrentSection(section); setShowSettings(false); setIsSidebarOpen(false) }}
+                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === section ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}
+              >
+                {icon}
+                <span className={`text-xs font-normal ${inter.className}`}>{label}</span>
+              </div>
+            ))}
           </div>
 
           <div className="w-full flex justify-center absolute bottom-6 left-0">
@@ -250,6 +273,9 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
                 {currentSection === 1 && <FilesSection readOnly showOwnerInReadOnly />}
                 {currentSection === 2 && <LinkedInContextSection title="Context" />}
                 {currentSection === 3 && <ClientTeamSection />}
+                {currentSection === 4 && <ClientOverviewSection view="analytics" />}
+                {currentSection === 5 && <ClientOverviewSection view="campaigns" />}
+                {currentSection === 6 && <ClientBillingSection canManage />}
               </>
             )}
           </div>

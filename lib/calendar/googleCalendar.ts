@@ -1,3 +1,5 @@
+import { getCalendarVisibilityPreferences, isGeneratedGoogleCalendar, resolveCalendarVisibility } from "@/lib/googleCalendar/visibility";
+
 /**
  * Google Calendar helpers for the meeting booker. Uses the same OAuth token as Gmail
  * (calendar.readonly grants free/busy; calendar.events is needed to create events —
@@ -8,18 +10,28 @@ const CAL = "https://www.googleapis.com/calendar/v3";
 export type BusyInterval = { start: string; end: string };
 
 /**
- * Query the host's primary calendar for busy intervals in a window. Returns `null` (not `[]`)
- * on any failure — a non-OK response, a network error, or a malformed body — so a caller can
- * tell "the host has no meetings" apart from "we couldn't ask Google." Collapsing those into the
- * same `[]` used to make a failed lookup show the host as completely free, letting a visitor
- * book straight over a real meeting.
+ * Query specific calendars (default: just "primary") for busy intervals in a window, unioning
+ * every calendar's busy blocks together. Returns `null` (not `[]`) on any failure — a non-OK
+ * response, a network error, or a malformed body — so a caller can tell "the host has no
+ * meetings" apart from "we couldn't ask Google." Collapsing those into the same `[]` used to
+ * make a failed lookup show the host as completely free, letting a visitor book straight over a
+ * real meeting.
+ *
+ * Callers checking a real host's availability (not just their primary calendar) should resolve
+ * `calendarIds` via `resolveVisibleCalendarIds` first — see that function's own doc comment for
+ * why "primary" alone under-reports busy time.
  */
-export async function getBusy(accessToken: string, timeMin: string, timeMax: string): Promise<BusyInterval[] | null> {
+export async function getBusy(
+  accessToken: string,
+  timeMin: string,
+  timeMax: string,
+  calendarIds: string[] = ["primary"]
+): Promise<BusyInterval[] | null> {
   try {
     const res = await fetch(`${CAL}/freeBusy`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ timeMin, timeMax, items: [{ id: "primary" }] }),
+      body: JSON.stringify({ timeMin, timeMax, items: calendarIds.map((id) => ({ id })) }),
     });
     if (!res.ok) {
       // Was previously swallowed into a bare `[]`, which is indistinguishable from "genuinely no
@@ -28,13 +40,65 @@ export async function getBusy(accessToken: string, timeMin: string, timeMax: str
       console.error(`[getBusy] freeBusy ${res.status}: ${(await res.text().catch(() => "")).slice(0, 500)}`);
       return null;
     }
-    const data = (await res.json().catch(() => null)) as { calendars?: { primary?: { busy?: BusyInterval[] } } } | null;
-    const busy = data?.calendars?.primary?.busy;
-    if (!Array.isArray(busy)) console.error(`[getBusy] unexpected freeBusy response shape: ${JSON.stringify(data).slice(0, 500)}`);
-    return Array.isArray(busy) ? busy : null;
+    const data = (await res.json().catch(() => null)) as { calendars?: Record<string, { busy?: BusyInterval[] }> } | null;
+    if (!data?.calendars) {
+      console.error(`[getBusy] unexpected freeBusy response shape: ${JSON.stringify(data).slice(0, 500)}`);
+      return null;
+    }
+    const merged: BusyInterval[] = [];
+    for (const id of calendarIds) {
+      const busy = data.calendars[id]?.busy;
+      if (Array.isArray(busy)) merged.push(...busy);
+    }
+    return merged;
   } catch (err) {
     console.error(`[getBusy] freeBusy request failed: ${err instanceof Error ? err.message : String(err)}`);
     return null;
+  }
+}
+
+function canReadCalendar(accessRole: string | undefined): boolean {
+  if (!accessRole) return false;
+  return ["freeBusyReader", "reader", "writer", "owner"].includes(accessRole);
+}
+
+type GoogleCalendarListResponse = {
+  items?: Array<{ id?: string; hidden?: boolean; accessRole?: string; primary?: boolean }>;
+};
+
+/**
+ * Every calendar id a host's booking availability should be checked against — not just
+ * "primary". `getBusy`/`getBusyOverRange` used to hardcode `items: [{id: "primary"}]`, so a
+ * meeting on a secondary calendar (a shared team calendar, a personal one, anything not the
+ * account's default) never counted as busy — a slot could show as open, and a visitor could book
+ * straight over it, on the exact same host whose dashboard "Upcoming Meetings" (which already
+ * enumerates every visible calendar — see lib/dashboard/upcomingMeetings.ts) correctly showed
+ * that meeting. This reuses that same visible-calendar resolution — respecting the host's own
+ * per-calendar visibility toggles and excluding Google's generated calendars (holidays, etc.) —
+ * so booking availability and the dashboard agree on what "busy" means for this host.
+ *
+ * Falls back to `["primary"]` if the calendar list itself can't be read, rather than failing the
+ * whole booking flow over a transient calendarList error.
+ */
+export async function resolveVisibleCalendarIds(userId: string, accountEmail: string, accessToken: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${CAL}/users/me/calendarList?showHidden=false&showDeleted=false`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return ["primary"];
+    const json = (await res.json().catch(() => null)) as GoogleCalendarListResponse | null;
+    const visibilityRows = await getCalendarVisibilityPreferences(userId);
+    const visibilityMap = new Map(visibilityRows.map((row) => [`${row.accountEmail}::${row.calendarId}`, row.isEnabled]));
+    const ids = (json?.items || [])
+      .filter((cal) => {
+        if (!cal.id || cal.hidden || !canReadCalendar(cal.accessRole)) return false;
+        if (isGeneratedGoogleCalendar(cal.id)) return false;
+        return resolveCalendarVisibility(visibilityMap, { accountEmail, calendarId: cal.id, primary: cal.primary });
+      })
+      .map((cal) => cal.id as string);
+    return ids.length > 0 ? ids : ["primary"];
+  } catch {
+    return ["primary"];
   }
 }
 
@@ -51,17 +115,22 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * instead of `getBusy` directly whenever the range isn't already known to be short — a plain
  * `getBusy` call over 120+ days doesn't return partial data, it fails the whole request.
  */
-export async function getBusyOverRange(accessToken: string, timeMin: string, timeMax: string): Promise<BusyInterval[] | null> {
+export async function getBusyOverRange(
+  accessToken: string,
+  timeMin: string,
+  timeMax: string,
+  calendarIds: string[] = ["primary"]
+): Promise<BusyInterval[] | null> {
   const startMs = new Date(timeMin).getTime();
   const endMs = new Date(timeMax).getTime();
   const spanDays = (endMs - startMs) / MS_PER_DAY;
-  if (spanDays <= MAX_FREEBUSY_RANGE_DAYS) return getBusy(accessToken, timeMin, timeMax);
+  if (spanDays <= MAX_FREEBUSY_RANGE_DAYS) return getBusy(accessToken, timeMin, timeMax, calendarIds);
 
   const chunkMs = MAX_FREEBUSY_RANGE_DAYS * MS_PER_DAY;
   const requests: Promise<BusyInterval[] | null>[] = [];
   for (let chunkStart = startMs; chunkStart < endMs; chunkStart += chunkMs) {
     const chunkEnd = Math.min(chunkStart + chunkMs, endMs);
-    requests.push(getBusy(accessToken, new Date(chunkStart).toISOString(), new Date(chunkEnd).toISOString()));
+    requests.push(getBusy(accessToken, new Date(chunkStart).toISOString(), new Date(chunkEnd).toISOString(), calendarIds));
   }
   const results = await Promise.all(requests);
   if (results.some((r) => r === null)) return null;

@@ -1,4 +1,5 @@
 import React, { useState, useRef, MouseEvent, useEffect } from "react"
+import PanelCombobox from "@/components/panel/PanelCombobox"
 import PdfUploader from "@/components/ui/PdfUploader"
 import { inter } from "@/lib/fonts";
 import { Document, Page, pdfjs } from "react-pdf"
@@ -9,7 +10,6 @@ import {
   FiTrash2,
   FiChevronLeft,
   FiChevronRight,
-  FiChevronDown,
   FiLink,
   FiCopy,
   FiFolderPlus,
@@ -543,25 +543,22 @@ const SignPdfSection: React.FC = () => {
                       <div className="flex flex-wrap gap-3 items-center">
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <label className="text-sm font-medium text-[#374151]">Save To:</label>
-                          <div className="relative min-w-[120px]">
-                            <select
+                          <div className="min-w-[120px]">
+                            <PanelCombobox
+                              aria-label="Save To"
                               value={recipientType}
-                              onChange={(e) => {
-                                setRecipientType(e.target.value as "staff" | "client")
+                              onChange={(value) => {
+                                setRecipientType(value as "staff" | "client")
                                 setRecipientId("")
                                 recipientIdRef.current = ""
                                 setRecipientQuery("")
                                 setSaveStatus("idle")
                                 setSaveError(null)
                               }}
-                              className="h-10 w-full min-w-[120px] appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-10 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                            >
-                              <option value="staff">Staff</option>
-                              <option value="client">Client</option>
-                            </select>
-                            <FiChevronDown
-                              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
-                              aria-hidden
+                              options={[
+                                { value: "staff", label: "Staff" },
+                                { value: "client", label: "Client" },
+                              ]}
                             />
                           </div>
                         </div>

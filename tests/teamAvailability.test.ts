@@ -16,7 +16,8 @@ vi.mock("@/lib/gmail/tokens", () => ({ getValidGmailAccessToken: vi.fn() }));
 // busyFor.mockImplementation(...) setup below still governs what it returns.
 vi.mock("@/lib/calendar/googleCalendar", () => {
   const getBusy = vi.fn();
-  return { getBusy, getBusyOverRange: getBusy };
+  const resolveVisibleCalendarIds = vi.fn().mockResolvedValue(["primary"]);
+  return { getBusy, getBusyOverRange: getBusy, resolveVisibleCalendarIds };
 });
 
 import { prisma } from "@/lib/prisma";

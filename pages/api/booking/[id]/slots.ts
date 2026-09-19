@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusyOverRange, type BusyInterval } from "@/lib/calendar/googleCalendar";
+import { getBusyOverRange, resolveVisibleCalendarIds, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
 
@@ -55,7 +55,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         select: { start_at: true, end_at: true },
       }),
     ]);
-    const calendarBusy = token.ok ? await getBusyOverRange(token.accessToken, rangeStart.toISOString(), rangeEnd.toISOString()) : null;
+    const calendarIds = token.ok ? await resolveVisibleCalendarIds(link.user_id, link.account_email, token.accessToken) : ["primary"];
+    const calendarBusy = token.ok
+      ? await getBusyOverRange(token.accessToken, rangeStart.toISOString(), rangeEnd.toISOString(), calendarIds)
+      : null;
     // getBusy (and an invalid/expired token) can't tell us the host is actually free — only that
     // we couldn't check. Previously that was treated as "no busy events" and merged in as `[]`,
     // which showed the host as wide open (including over real meetings) whenever the Calendar

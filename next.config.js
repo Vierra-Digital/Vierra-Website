@@ -41,7 +41,11 @@ const nextConfig = {
     // image transfer size / LCP. Browsers that support neither fall back to the original.
     formats: ['image/avif', 'image/webp'],
     // Quality levels used via <Image quality={...} /> must be declared (required in Next 16).
-    qualities: [80],
+    // 100 is here because four call sites ask for it — the profile avatar in UserSettingsPage,
+    // panel, client and connect. Undeclared, Next logs "using quality 100 which is not configured"
+    // on every render and serves the default instead, so those avatars were quietly never getting
+    // the quality they asked for.
+    qualities: [80, 100],
     // Cache optimized image variants for 30 days to cut repeat re-optimization work.
     minimumCacheTTL: 2592000,
     remotePatterns: [

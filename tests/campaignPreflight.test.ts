@@ -20,4 +20,11 @@ describe("campaign launch preflight", () => {
     db.company.findUnique.mockResolvedValue(null);
     expect((await campaignPreflight({ id: "campaign", company_id: "client-a", send_provider: "smartlead" })).blockers).toContain("Add at least one sequence step before launching.");
   });
+  it("blocks an empty audience for every provider — launching to nobody previously succeeded silently", async () => {
+    db.campaignContact.count.mockResolvedValue(0);
+    db.company.findUnique.mockResolvedValue({ name: "Client A", mailing_address: "123 Main St" });
+    const result = await campaignPreflight({ id: "campaign", company_id: "client-a", send_provider: "brevo" });
+    expect(result.audience).toBe(0);
+    expect(result.blockers.join(" ")).toContain("Enroll at least one contact");
+  });
 });

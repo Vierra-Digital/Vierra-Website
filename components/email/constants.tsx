@@ -51,7 +51,7 @@ export const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNo
   { key: "allmail", label: "All Mail", icon: <FiLayers className="w-4 h-4" /> },
   { key: "analytics", label: "Analytics", icon: <FiBarChart2 className="w-4 h-4" /> },
   { key: "contacts", label: "Contacts", icon: <FiUsers className="w-4 h-4" /> },
-  { key: "cryptography", label: "Cartography", icon: <FiKey className="w-4 h-4" /> },
+  { key: "cartography", label: "Cartography", icon: <FiKey className="w-4 h-4" /> },
   { key: "campaigns", label: "Campaigns", icon: <FiCheckSquare className="w-4 h-4" /> },
   { key: "archive", label: "Archive", icon: <FiArchive className="w-4 h-4" /> },
   { key: "spam", label: "Spam", icon: <FiMail className="w-4 h-4" /> },

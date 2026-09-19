@@ -18,7 +18,8 @@
     "syncdb": "node scripts/sync-db.js",
     "create-client": "node scripts/create-client.js",
     "connect-ga4": "node scripts/connect-ga4.js",
-    "provision-audit-call-link": "node scripts/provision-audit-call-link.js"
+    "provision-audit-call-link": "node scripts/provision-audit-call-link.js",
+    "backfill:stripe-invoices": "tsx scripts/backfillStripeInvoices.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -75,7 +76,6 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.7",
     "@next/bundle-analyzer": "^16.3.4",
     "@types/formidable": "^3.5.1",
     "@types/node": "^26.4.1",
@@ -92,6 +92,7 @@
     "postcss": "^8.5.28",
     "prisma": "^7.10.0",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.20.6",
     "typescript": "^6.0.3",
     "vitest": "^5.0.0"
   },
@@ -109,7 +110,7 @@
     "mysql2": "^3.24.3",
     "glob": "10.5.0",
     "@eslint/config-array": "0.23.4",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
     "postcss": "$postcss",
     "brace-expansion@1.1.15": "1.1.18",
     "exceljs": {

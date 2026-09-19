@@ -3,89 +3,111 @@ import { parseCookie } from "@/lib/api/cookies"
 import { prisma } from "@/lib/prisma"
 import { stripe } from "@/lib/stripe"
 import { resolveBaseUrl } from "@/lib/api/url"
+import { getRetainerProductId } from "@/lib/stripe/retainerProduct"
+import { handleApiError } from "@/lib/api/guards"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"])
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
   }
-
-  const { onboardingToken } = req.body ?? {}
-  if (!onboardingToken) {
-    return res.status(400).json({ message: "onboardingToken is required." })
+  // Checked explicitly, before anything touches the lazy `stripe` client (lib/stripe.ts) — without
+  // this, a missing key throws from inside the try/catch below and is reported only as "Failed to
+  // create checkout session," indistinguishable in logs/responses from a genuine Stripe outage.
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(503).json({ message: "Billing is not configured." })
   }
 
-  const cookies = parseCookie(req.headers.cookie || "")
-  if (cookies.ob_session !== onboardingToken) {
-    return res.status(403).json({ message: "Forbidden" })
-  }
+  try {
+    const { onboardingToken } = req.body ?? {}
+    if (!onboardingToken) {
+      return res.status(400).json({ message: "onboardingToken is required." })
+    }
 
-  const session = await prisma.onboardingSession.findUnique({
-    where: { id: onboardingToken },
-    include: {
-      clients: {
-        include: { client_billing: true },
-      },
-    },
-  })
-  if (!session || !session.clients) {
-    return res.status(404).json({ message: "Onboarding session not found." })
-  }
+    const cookies = parseCookie(req.headers.cookie || "")
+    if (cookies.ob_session !== onboardingToken) {
+      return res.status(403).json({ message: "Forbidden" })
+    }
 
-  const client = session.clients
-  const billing = client.client_billing
-  const monthlyRetainerCents = billing?.monthly_retainer_cents ?? 0
-  if (!monthlyRetainerCents || monthlyRetainerCents <= 0) {
-    return res.status(400).json({ message: "Monthly retainer amount is missing for this client." })
-  }
-
-  let stripeCustomerId = billing?.stripe_customer_id ?? null
-
-  if (!stripeCustomerId) {
-    const customer = await stripe.customers.create({
-      name: client.name,
-      email: client.email,
-      metadata: {
-        vierraClientId: client.id,
-        businessName: client.business_name,
-      },
-    })
-    stripeCustomerId = customer.id
-    await prisma.clientBilling.upsert({
-      where: { client_id: client.id },
-      create: { client_id: client.id, stripe_customer_id: stripeCustomerId },
-      update: { stripe_customer_id: stripeCustomerId },
-    })
-  }
-
-  const baseUrl = resolveBaseUrl(req)
-  const successUrl = `${baseUrl}/stripe/success`
-  const cancelUrl = `${baseUrl}/onboarding/${onboardingToken}`
-
-  const checkoutSession = await stripe.checkout.sessions.create({
-    customer: stripeCustomerId,
-    mode: "subscription",
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: "usd",
-          unit_amount: monthlyRetainerCents,
-          recurring: { interval: "month" },
-          product_data: {
-            name: `${client.business_name} Monthly Retainer`,
-          },
+    const session = await prisma.onboardingSession.findUnique({
+      where: { id: onboardingToken },
+      include: {
+        clients: {
+          include: { client_billing: true },
         },
       },
-    ],
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    metadata: {
-      vierraClientId: client.id,
-      onboardingToken,
-    },
-  })
+    })
+    if (!session || !session.clients) {
+      return res.status(404).json({ message: "Onboarding session not found." })
+    }
 
-  return res.status(200).json({ url: checkoutSession.url })
+    const client = session.clients
+    const billing = client.client_billing
+    const monthlyRetainerCents = billing?.monthly_retainer_cents ?? 0
+    if (!monthlyRetainerCents || monthlyRetainerCents <= 0) {
+      return res.status(400).json({ message: "Monthly retainer amount is missing for this client." })
+    }
+
+    let stripeCustomerId = billing?.stripe_customer_id ?? null
+
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        name: client.name,
+        email: client.email,
+        metadata: {
+          vierraClientId: client.id,
+          businessName: client.business_name,
+        },
+      })
+      stripeCustomerId = customer.id
+      await prisma.clientBilling.upsert({
+        where: { client_id: client.id },
+        create: { client_id: client.id, stripe_customer_id: stripeCustomerId },
+        update: { stripe_customer_id: stripeCustomerId },
+      })
+    }
+
+    const baseUrl = resolveBaseUrl(req)
+    const successUrl = `${baseUrl}/stripe/success`
+    const cancelUrl = `${baseUrl}/onboarding/${onboardingToken}`
+
+    /**
+     * One product for the service, referenced by id — not `product_data`, which makes Stripe
+     * create one on the fly.
+     *
+     * That produced a separate product per client named "<Business> Monthly Retainer", so the
+     * invoice line read "1 × Acme Co Monthly Retainer (at $1,000.00 / month)": the client's own
+     * name quoted back at them on the invoice they are paying. Worse, Stripe marks products it
+     * created that way as automatic and immutable — renaming one fails outright — so the existing
+     * ones cannot be corrected. A product we create ourselves can be.
+     */
+    const retainerProductId = await getRetainerProductId(stripe)
+
+    const checkoutSession = await stripe.checkout.sessions.create({
+      customer: stripeCustomerId,
+      mode: "subscription",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: monthlyRetainerCents,
+            recurring: { interval: "month" },
+            product: retainerProductId,
+          },
+        },
+      ],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        vierraClientId: client.id,
+        onboardingToken,
+      },
+    })
+
+    return res.status(200).json({ url: checkoutSession.url })
+  } catch (error) {
+    handleApiError(res, "/api/stripe/create-checkout", error, "Failed to create checkout session.")
+  }
 }

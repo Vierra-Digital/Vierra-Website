@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { withAuth } from "@/lib/api/withAuth";
+import { handleApiError } from "@/lib/api/guards";
 import { parseContactsCsvWithValidation } from "@/lib/contacts/csv";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
@@ -61,6 +62,8 @@ export default withAuth(async (req, res, session) => {
     res.status(400).json({ message: "csvText is required." });
     return;
   }
+
+  try {
   const accountEmail = typeof req.body?.accountEmail === "string" ? req.body.accountEmail.trim().toLowerCase() : "";
   const accountId = await resolveAccountId(userId, accountEmail);
 
@@ -144,7 +147,7 @@ export default withAuth(async (req, res, session) => {
   }
   // Every valid row counts as imported (matching the prior per-row increment), even if two rows
   // share an email and resolve to the same contact.
-  const imported = validRows.length;
+  let imported = validRows.length;
 
   // Collapse duplicate-email rows so the concurrent write phase never targets the same contact key
   // twice at once (which would race to a P2002). Last occurrence wins for the contact fields
@@ -162,44 +165,64 @@ export default withAuth(async (req, res, session) => {
 
   // Phase 2 — resolve every DISTINCT tag once up front, so the write phase never races to create
   // the same tag (this replaces the per-row shared cache that couldn't be parallelized safely).
+  // Each name is caught individually: mapInBatches rejects its *whole* call on the first throw, and
+  // one bad tag name shouldn't cost every contact in the batch its tags — those contacts still
+  // import, just without the tag that failed to resolve.
   const tagIdByName = new Map<string, string>();
   const allTagNames = [...new Set([...byEmail.values()].flatMap((v) => [...v.tagNames]))];
   await mapInBatches(allTagNames, async (name) => {
-    const tag = await prisma.contactTag.upsert({
-      where: { user_id_name: { user_id: userId, name } },
-      update: {},
-      create: { user_id: userId, name },
-    });
-    tagIdByName.set(name, tag.id);
+    try {
+      const tag = await prisma.contactTag.upsert({
+        where: { user_id_name: { user_id: userId, name } },
+        update: {},
+        create: { user_id: userId, name },
+      });
+      tagIdByName.set(name, tag.id);
+    } catch (e) {
+      console.error("contacts/import tag upsert", name, e);
+    }
   });
 
   // Phase 3 — upsert contacts with bounded concurrency. Emails are unique after the collapse above,
-  // so there are no key races; each returns its id + tag names for the assignment phase.
-  const written = await mapInBatches([...byEmail.entries()], async ([email, v]) => {
-    const createData = {
-      company_id: companyId,
-      user_id: userId,
-      account_id: accountId,
-      source: "csv" as const,
-      email,
-      ...v.data,
-    };
-    const contact = accountId
-      ? await prisma.contact.upsert({
-          where: { company_id_account_id_email: { company_id: companyId, account_id: accountId, email } },
-          create: createData,
-          update: v.data,
-        })
-      : await (async () => {
-          const existing = await prisma.contact.findFirst({
-            where: { company_id: companyId, account_id: null, email },
-            select: { id: true },
-          });
-          if (existing) return prisma.contact.update({ where: { id: existing.id }, data: v.data });
-          return prisma.contact.create({ data: createData });
-        })();
-    return { contactId: contact.id, tagNames: v.tagNames };
+  // so there are no key races. Each write is caught individually for the same reason as Phase 2: a
+  // single bad row (e.g. a companyId that stopped naming a real company mid-request) shouldn't
+  // throw away every other row's already-committed progress and report the whole import as failed.
+  const writeResults = await mapInBatches([...byEmail.entries()], async ([email, v]) => {
+    try {
+      const createData = {
+        company_id: companyId,
+        user_id: userId,
+        account_id: accountId,
+        source: "csv" as const,
+        email,
+        ...v.data,
+      };
+      const contact = accountId
+        ? await prisma.contact.upsert({
+            where: { company_id_account_id_email: { company_id: companyId, account_id: accountId, email } },
+            create: createData,
+            update: v.data,
+          })
+        : await (async () => {
+            const existing = await prisma.contact.findFirst({
+              where: { company_id: companyId, account_id: null, email },
+              select: { id: true },
+            });
+            if (existing) return prisma.contact.update({ where: { id: existing.id }, data: v.data });
+            return prisma.contact.create({ data: createData });
+          })();
+      return { ok: true as const, email, contactId: contact.id, tagNames: v.tagNames };
+    } catch (e) {
+      console.error("contacts/import contact write", email, e);
+      return { ok: false as const, email };
+    }
   });
+  const written = writeResults.filter((r): r is { ok: true; email: string; contactId: string; tagNames: Set<string> } => r.ok);
+  const writeFailures = writeResults.filter((r): r is { ok: false; email: string } => !r.ok);
+  // A row that validated fine but failed at the DB is no longer "imported" — move it to skipped so
+  // the counts the caller sees stay honest about what's actually in the database now.
+  imported -= writeFailures.length;
+  skipped += writeFailures.length;
 
   // Phase 4 — write all tag assignments in one query. skipDuplicates makes it idempotent, matching
   // the prior per-assignment upsert-with-empty-update.
@@ -221,6 +244,10 @@ export default withAuth(async (req, res, session) => {
     skipped,
     totalRows: rows.length,
     errors: rowErrors,
+    writeErrors: writeFailures.map((f) => f.email),
     headerErrors: [],
   });
+  } catch (e) {
+    handleApiError(res, "contacts/import", e, "Failed to import contacts.");
+  }
 }, { methods: ["POST"] });

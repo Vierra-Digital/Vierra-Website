@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { getTeamBusyIntersection, findFirstGmailAccountForUser } from "@/lib/booking/teamAvailability";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy, cancelCalendarEvent, type BusyInterval } from "@/lib/calendar/googleCalendar";
+import { getBusy, cancelCalendarEvent, resolveVisibleCalendarIds, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { getValidZoomAccessTokenForUser } from "@/lib/zoom/tokens";
 import { getValidMsTeamsAccessTokenForUser } from "@/lib/msteams/tokens";
 import { cancelZoomMeeting } from "@/lib/calendar/zoomMeetings";
@@ -61,7 +61,8 @@ export async function rescheduleBooking(bookingId: string, newStart: Date, resch
     calendarBusy = await getTeamBusyIntersection(link.company_id, now.toISOString(), validationRangeEnd.toISOString());
   } else {
     const token = await getValidGmailAccessToken(link.user_id, link.account_email);
-    const result = token.ok ? await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString()) : null;
+    const calendarIds = token.ok ? await resolveVisibleCalendarIds(link.user_id, link.account_email, token.accessToken) : ["primary"];
+    const result = token.ok ? await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString(), calendarIds) : null;
     // null means we couldn't check the calendar, not that it's empty — proceeding as `[]` would
     // let a reschedule land on a real conflict we simply failed to see (see slots.ts's fix).
     if (result === null) return { ok: false, message: "Could not verify host availability right now — please try again shortly." };

@@ -1,11 +1,13 @@
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { buildContactsWhere, serializeContact } from "@/lib/api/contacts";
 import { asQueryStr, asStr } from "@/lib/api/parsing";
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 import { normalizePhone } from "@/lib/contacts/phone";
+import { handleApiError } from "@/lib/api/guards";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
@@ -16,10 +18,11 @@ export default withAuth(async (req, res, session) => {
 
   if (req.method === "GET") {
     // No target company named: a representative's own companyId always resolves above, so this
-    // only happens for Vierra staff, who get every client's contacts merged together rather than
-    // a 400 — the active-client picker scopes writes (a contact must belong to one company) but
-    // was never meant to gate staff's ability to just look everything up.
-    const mergedView = !companyId;
+    // only happens for Vierra staff, who get every client's contacts merged together (tagged with
+    // which company each came from) rather than being narrowed to Vierra's own — unlike the write
+    // paths below, browsing was never meant to gate staff's ability to just look everything up,
+    // and resolveTargetCompanyId's Vierra-default exists for writes, not for this.
+    const mergedView = session.kind === "member" && !hasExplicitTargetCompanyId(session, req);
 
     // Pagination is this route's own concern; the export sends every match.
     const pageRaw = Number(asQueryStr(req.query.page));
@@ -27,7 +30,7 @@ export default withAuth(async (req, res, session) => {
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 50;
 
-    const where = await buildContactsWhere(userId, companyId, req.query);
+    const where = await buildContactsWhere(userId, mergedView ? null : companyId, req.query);
 
     try {
       const [total, contacts] = await Promise.all([
@@ -63,8 +66,7 @@ export default withAuth(async (req, res, session) => {
         },
       });
     } catch (e) {
-      console.error("contacts GET", e);
-      res.status(500).json({ message: "Failed to load contacts." });
+      handleApiError(res, "contacts GET", e, "Failed to load contacts.");
     }
     return;
   }
@@ -132,8 +134,15 @@ export default withAuth(async (req, res, session) => {
       await syncContactsSpreadsheetForUser({ userId, companyId });
       res.status(201).json({ contact: serializeContact(created) });
     } catch (e) {
-      console.error("contacts POST", e);
-      res.status(500).json({ message: "Failed to create contact." });
+      // A companyId that's UUID-shaped (resolveTargetCompanyId only hands back shaped values,
+      // see lib/api/targetCompany.ts) but doesn't name a real company trips the FK constraint on
+      // contacts.company_id at insert time — answer that with a message specific to this route
+      // rather than the mapper's generic "Referenced record not found."
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+        res.status(400).json({ message: "Target company not found." });
+        return;
+      }
+      handleApiError(res, "contacts POST", e, "Failed to create contact.");
     }
     return;
   }

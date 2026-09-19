@@ -1,31 +1,35 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { resolveTargetCompanyId, hasExplicitTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Outreach reporting summary for the Analytics panel: campaign volume, lead-status
  * breakdown, reply rate, and meetings booked. Campaigns are client-scoped (see
- * docs/ROLE_MODEL_REDESIGN.md's "v2" section — an explicit target is required, session.companyId
- * is Vierra's own fixed company now); bookings are user-scoped. Degrades to zeros if the
- * campaign/booking tables aren't present yet.
+ * docs/ROLE_MODEL_REDESIGN.md's "v2" section — session.companyId is Vierra's own fixed company
+ * now, via resolveTargetCompanyId's fallback, so it can't stand in for "no client chosen"). A
+ * staff member with no client picked sees every client's campaigns merged together, same as the
+ * Dashboard and the tracking-stats endpoint this panel also calls; bookings are user-scoped.
+ * Degrades to zeros if the campaign/booking tables aren't present yet.
  */
 export default withAuth(
   async (req, res, session) => {
+    const merged = !hasExplicitTargetCompanyId(session, req);
     const companyId = resolveTargetCompanyId(session, req);
-    if (!companyId) {
+    if (!merged && !companyId) {
       res.status(400).json({ message: "companyId is required" });
       return;
     }
+    const campaignWhere = merged ? {} : { company_id: companyId! };
     const userId = session.user.id;
 
     try {
       const [campaigns, activeCampaigns, totalContacts, byStatus, bookings, upcomingBookings] = await Promise.all([
-        prisma.campaign.count({ where: { company_id: companyId } }),
-        prisma.campaign.count({ where: { company_id: companyId, status: "active" } }),
-        prisma.campaignContact.count({ where: { campaigns: { company_id: companyId } } }),
+        prisma.campaign.count({ where: campaignWhere }),
+        prisma.campaign.count({ where: { ...campaignWhere, status: "active" } }),
+        prisma.campaignContact.count({ where: { campaigns: campaignWhere } }),
         prisma.campaignContact.groupBy({
           by: ["lead_status"],
-          where: { campaigns: { company_id: companyId } },
+          where: { campaigns: campaignWhere },
           _count: true,
         }),
         prisma.booking.count({ where: { booking_links: { user_id: userId } } }),

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { parseCookie } from "@/lib/api/cookies";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
@@ -7,6 +8,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { token, answers, completed = false, clientAnswers = false } = req.body ?? {};
   if (!token) {
     return res.status(400).json({ message: "Missing token" });
+  }
+
+  // Same ob_session cookie check every other onboarding route enforces (generateNdaLink.ts,
+  // disconnectPlatform.ts, stripe/create-checkout.ts): the token appears in the onboarding URL
+  // itself, so it can leak through browser history or a referrer header. The cookie set when the
+  // session was first opened is what actually proves this request came from that browser, not just
+  // from someone who saw the link — without it, anyone who obtained the token could overwrite this
+  // client's saved answers or flip completed: true to close out their onboarding early.
+  const cookies = parseCookie(req.headers.cookie || "");
+  if (cookies.ob_session !== token) {
+    return res.status(403).json({ message: "Forbidden" });
   }
 
   try {

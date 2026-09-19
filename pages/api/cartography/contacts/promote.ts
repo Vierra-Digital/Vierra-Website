@@ -2,6 +2,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { isUuid } from "@/lib/api/parsing";
 
 export type PromoteResult = { id: string; ok: boolean; contactId?: string; reason?: string };
 
@@ -33,6 +34,13 @@ export default withAuth(
 
     for (const id of ids) {
       try {
+        // cartography_contacts.id is a @db.Uuid column — skip the query entirely for a
+        // malformed id rather than letting Prisma throw (P2007) and land in the catch below with
+        // the misleading "Couldn't reach the Cartography store" reason.
+        if (!isUuid(id)) {
+          results.push({ id, ok: false, reason: "Not found." });
+          continue;
+        }
         const candidate = await prisma.cartographyContact.findUnique({
           where: { id },
           include: { cartography_companies: true },
